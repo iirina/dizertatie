@@ -18,7 +18,6 @@ string_starts_with(String, StartsWith) ->
     FindIndex = string:str(String, StartsWith),
     FindIndex == 1.
 
-
 %% makes a notification of joining, leaving, etc.
 format_notification(Name, Action) ->
 	string_timestamp() ++ " " ++ Name ++ " " ++ Action ++ ".".

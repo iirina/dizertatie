@@ -82,14 +82,13 @@ read(Socket, Name, Pid) ->
     end.
 
 handle_packet(Packet, Name, _GenServerPid) ->
-    %% For now, we only have one other option besides authentication: group message.
     case get_action_type(Packet) of
         {group_message, Message} ->
             logger:debug("socket_handler:handle_packet() Got action group_message."),
-            courier:group_message(chat_utils:format_message(Name, Message, ?GROUP_MESSAGE_TOKEN));
+            courier:group_message(Name, chat_utils:format_message(Name, Message, ?GROUP_MESSAGE_TOKEN));
         {chat, To, Message} ->
             logger:debug("socket_handler:handle_packet() Got action chat."),
-            courier:chat(To, chat_utils:format_message(Name, Message, ?CHAT_TOKEN));
+            courier:chat(Name, To, chat_utils:format_message(Name, Message, ?CHAT_TOKEN));
         _Other ->
             do_nothing
     end.
