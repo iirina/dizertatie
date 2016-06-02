@@ -56,13 +56,15 @@ read(Socket, Name, Pid) ->
             %% Pid corresponds to the gen_server that handles Socket.
             case Name of
                 undefined ->
-                    case handle_auth(Packet, Pid) of
+                    %% In this case, the Name is undefined, so auth is mandatory.
+                    case auth:handle_auth_packet(Packet, Pid) of
                         {user, User} ->
                             read(Socket, User, Pid);
                         _Other ->
                             read(Socket, undefined, Pid)
                     end;
                 _Other ->
+                    %% Here, the user is authenticated as Name.
                     handle_packet(Packet, Name, Pid),
                     read(Socket, Name, Pid)
             end;
@@ -74,39 +76,6 @@ read(Socket, Name, Pid) ->
             gen_server:cast(Pid, socket_closed)
     end.
 
-%% In this case, the Name is undefined, so auth is mandatory.
-handle_auth(Packet, GenServerPid) ->
-    Request = erlang:binary_to_list(Packet),
-    case auth:is_auth_request(Request) of
-        {user, User} ->
-            case auth:verify_validity(User) of
-                true ->
-                    %% We have to mark this user as connected, let the user now the
-                    %% authentication was successful and notify the other chat users about
-                    %% his presence.
-                    courier:connected(User, GenServerPid),
-                    gen_server:cast(GenServerPid, {set_user, User}),
-                    gen_server:cast(GenServerPid, {message, auth:authentication_successful()}),
-                    %% Informs all chat users about the newly connected user.
-                    courier:message(chat_utils:format_notification(User, "connected.")),
-                    logger:debug("socket_handler:handle_auth() Identified user ~p.", [User]),
-                    {user, User};
-                false ->
-                    %% Authentication has failed, therefor we will try reading
-                    %% again from the socket.
-                    logger:info("auth:auth_loop() User ~p can not be authentified.", [User]),
-                    %% Let the user know the authentication faild.
-                    gen_server:cast(GenServerPid, {message, auth:authentication_faild()}),
-                    authentication_failed
-            end;
-        false ->
-            logger:info("auth:auth_loop() Wrong auth message sent: ~p", [Request]),
-            %% Let the user know the authentication faild.
-            gen_server:cast(GenServerPid, {message, auth:authentication_faild()}),
-            authentication_failed
-    end.
-
-%% Here, the user is authentified as Name.
 handle_packet(Packet, Name, _GenServerPid) ->
     %% For now, we only have one other option besides authentication: group
     %% message.
