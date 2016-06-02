@@ -39,7 +39,7 @@ start_link() ->
     gen_server:start_link({local, courier}, courier, noargs, []).
 
 connected(Name, SocketServerPid) ->
-    gen_server:call(courier, {connected, Name, SocketServerPid}).
+    gen_server:cast(courier, {connected, Name, SocketServerPid}).
 
 is_valid(Name) ->
     gen_server:call(courier, {is_valid, Name}).
@@ -57,23 +57,6 @@ message(Msg) ->
 init(_Args) ->
     NewState = #state{pid_to_name = dict:new(), name_to_pid = dict:new()},
 	{ok, NewState}.
-
-handle_call({connected, Name, SocketServerPid}, {_FromPid, _FromTag}, State) ->
-    logger:debug("courier:connected() Trying to connect user ~p", [Name]),
-    PidToName = State#state.pid_to_name,
-    NameToPid = State#state.name_to_pid,
-    case dict:is_key(Name, NameToPid) of
-        true ->
-            % the name is already in use.
-            logger:info("courier:connected() Name ~p is already in use.", [Name]),
-            {reply, invalid, State};
-        false ->
-            NewPidToName = dict:append(SocketServerPid, Name, PidToName),
-            NewNameToPid = dict:append(Name, SocketServerPid, NameToPid),
-            NewState = #state{pid_to_name = NewPidToName, name_to_pid = NewNameToPid},
-            logger:info("courier:connected() Name ~p is now connected.", [Name]),
-            {reply, ok, NewState}
-    end;
 
 handle_call({is_valid, Name}, {_FromPid, _FromTag}, State) ->
     NameToPid = State#state.name_to_pid,
@@ -105,6 +88,23 @@ handle_call(disconnected, {FromPid, _FromTag}, State) ->
 handle_call(Request, From, State) ->
     logger:error("courier:handle_call(): Unknown request ~p from PID ~p", [Request, From]),
     {noreply, State}.
+
+handle_cast({connected, Name, SocketServerPid}, State) ->
+    logger:debug("courier:connected() Trying to connect user ~p", [Name]),
+    PidToName = State#state.pid_to_name,
+    NameToPid = State#state.name_to_pid,
+    case dict:is_key(Name, NameToPid) of
+        true ->
+            % the name is already in use.
+            logger:info("courier:connected() Name ~p is already in use.", [Name]),
+            {noreply, State};
+        false ->
+            NewPidToName = dict:append(SocketServerPid, Name, PidToName),
+            NewNameToPid = dict:append(Name, SocketServerPid, NameToPid),
+            NewState = #state{pid_to_name = NewPidToName, name_to_pid = NewNameToPid},
+            logger:info("courier:connected() Name ~p is now connected.", [Name]),
+            {noreply, NewState}
+    end;
 
 handle_cast({msg, Msg}, State) ->
     logger:debug("courier:msg() New message ~p", [Msg]),

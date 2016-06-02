@@ -47,16 +47,6 @@ start_link(Args) ->
 %%% Helper functions
 %%%===================================================================
 
-deliver_message(Socket, String) ->
-    logger:debug("socket_handler:deliver_message() Message ~s", [String]),
-	case gen_tcp:send(Socket, String ++ "\n") of
-        ok ->
-            logger:debug("Message ~p was sent.", [String]);
-        {error, Reason} ->
-            logger:debug("Message ~p was not sent due to reason ~p", [String, Reason])
-    end.
-
-
 read(Socket, Name, Pid) ->
     logger:debug("socket_handler:read() Ready to read."),
     case gen_tcp:recv(Socket, 0) of
@@ -66,7 +56,7 @@ read(Socket, Name, Pid) ->
             %% Pid corresponds to the gen_server that handles Socket.
             case Name of
                 undefined ->
-                    case handle_auth(Packet, Socket, Pid) of
+                    case handle_auth(Packet, Pid) of
                         {user, User} ->
                             read(Socket, User, Pid);
                         _Other ->
@@ -85,7 +75,7 @@ read(Socket, Name, Pid) ->
     end.
 
 %% In this case, the Name is undefined, so auth is mandatory.
-handle_auth(Packet, Socket, GenServerPid) ->
+handle_auth(Packet, GenServerPid) ->
     Request = erlang:binary_to_list(Packet),
     case auth:is_auth_request(Request) of
         {user, User} ->
@@ -94,34 +84,25 @@ handle_auth(Packet, Socket, GenServerPid) ->
                     %% We have to mark this user as connected, let the user now the
                     %% authentication was successful and notify the other chat users about
                     %% his presence.
-                    case courier:connected(User, GenServerPid) of
-                        ok ->
-                            gen_server:cast(GenServerPid, {set_user, User}),
-                            deliver_message(Socket, auth:authentication_successful()),
-                            %% Informs all chat users about the newly connected user.
-                            courier:message(chat_utils:format_notification(User, "connected.")),
-                            logger:debug("socket_handler:handle_auth() Identified user ~p.", [User]),
-                            {user, User};
-                        invalid ->
-                            %% This only happens when another user authenticated with this
-                            %% username meanwhile.
-                            logger:info("auth:auth_loop() Username ~p is already in use.", [User]),
-                            %% Let the user know the authentication faild.
-                            deliver_message(Socket, auth:authentication_failed()),
-                            authentication_failed
-                    end;
+                    courier:connected(User, GenServerPid),
+                    gen_server:cast(GenServerPid, {set_user, User}),
+                    gen_server:cast(GenServerPid, {message, auth:authentication_successful()}),
+                    %% Informs all chat users about the newly connected user.
+                    courier:message(chat_utils:format_notification(User, "connected.")),
+                    logger:debug("socket_handler:handle_auth() Identified user ~p.", [User]),
+                    {user, User};
                 false ->
                     %% Authentication has failed, therefor we will try reading
                     %% again from the socket.
                     logger:info("auth:auth_loop() User ~p can not be authentified.", [User]),
                     %% Let the user know the authentication faild.
-                    deliver_message(Socket, auth:authentication_failed()),
+                    gen_server:cast(GenServerPid, {message, auth:authentication_faild()}),
                     authentication_failed
             end;
         false ->
             logger:info("auth:auth_loop() Wrong auth message sent: ~p", [Request]),
             %% Let the user know the authentication faild.
-            deliver_message(Socket, auth:authentication_failed()),
+            gen_server:cast(GenServerPid, {message, auth:authentication_faild()}),
             authentication_failed
     end.
 
@@ -138,20 +119,8 @@ init(Args) ->
     {socket, Socket} = Args,
     logger:debug("socket_handler:init() Initializing socket_handler."),
     spawn_link(socket_handler, read, [Socket, undefined, self()]),
-        %     case courier:connected(User) of
-        %         ok ->
-        %             deliver_message(Socket, "Buna, " ++ User ++ "! Ai fost autentificat in chat." ++ "\n"),
-        %             %% Informs all chat users about the newly connected user.
-        %             courier:message(chat_utils:format_notification(User, "connected.")),
-        %             logger:debug("socket_handler:init() Identified user ~p.", [User]),
-        %             spawn_link(socket_handler, read, [Socket, User, self()]),
-        %             State = {Socket, User},
-        %             {ok, State};
-        %         invalid ->
-        %             {stop, "Invalid user!"}
-        %     end;
-        % {error, Error} ->
-        %     {stop, Error}
+    %% We set the Name undefined for now and wait for it to be set properly when the
+    %% authentication is successful.
     {ok, {Socket, undefined}}.
 
 handle_call(Request, From, State) ->
@@ -163,8 +132,14 @@ handle_cast({set_user, User}, {Socket, _Name}) ->
     {noreply, {Socket, User}};
 
 handle_cast({message, Msg}, {Socket, Name}=State) ->
-    logger:debug("socket_handler:handle_cast() Message ~p from ~p Socket ~p", [Msg, Name, Socket]),
-    deliver_message(Socket, Msg),
+    logger:debug(
+        "socket_handler:handle_cast() Message ~p from ~p Socket ~p", [Msg, Name, Socket]),
+	case gen_tcp:send(Socket, Msg ++ "\n") of
+        ok ->
+            logger:debug("Message ~p was sent.", [Msg]);
+        {error, Reason} ->
+            logger:debug("Message ~p was not sent due to reason ~p", [Msg, Reason])
+    end,
     {noreply, State};
 
 handle_cast(socket_closed, {_Socket, Name}=State) ->
