@@ -11,7 +11,7 @@
 %% API
 -export([
     start_link/0,
-    connected/1,
+    connected/2,
     is_valid/1,
     disconnected/0,
     message/1
@@ -38,8 +38,8 @@
 start_link() ->
     gen_server:start_link({local, courier}, courier, noargs, []).
 
-connected(Name) ->
-    gen_server:call(courier, {connected, Name}).
+connected(Name, SocketServerPid) ->
+    gen_server:call(courier, {connected, Name, SocketServerPid}).
 
 is_valid(Name) ->
     gen_server:call(courier, {is_valid, Name}).
@@ -58,7 +58,7 @@ init(_Args) ->
     NewState = #state{pid_to_name = dict:new(), name_to_pid = dict:new()},
 	{ok, NewState}.
 
-handle_call({connected, Name}, {FromPid, _FromTag}, State) ->
+handle_call({connected, Name, SocketServerPid}, {_FromPid, _FromTag}, State) ->
     logger:debug("courier:connected() Trying to connect user ~p", [Name]),
     PidToName = State#state.pid_to_name,
     NameToPid = State#state.name_to_pid,
@@ -68,8 +68,8 @@ handle_call({connected, Name}, {FromPid, _FromTag}, State) ->
             logger:info("courier:connected() Name ~p is already in use.", [Name]),
             {reply, invalid, State};
         false ->
-            NewPidToName = dict:append(FromPid, Name, PidToName),
-            NewNameToPid = dict:append(Name, FromPid, NameToPid),
+            NewPidToName = dict:append(SocketServerPid, Name, PidToName),
+            NewNameToPid = dict:append(Name, SocketServerPid, NameToPid),
             NewState = #state{pid_to_name = NewPidToName, name_to_pid = NewNameToPid},
             logger:info("courier:connected() Name ~p is now connected.", [Name]),
             {reply, ok, NewState}

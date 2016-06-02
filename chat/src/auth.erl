@@ -9,7 +9,9 @@
 %% API
 -export([
     auth/1,
-    start_link/0
+    start_link/0,
+    is_auth_request/1,
+    verify_validity/1
 ]).
 
 %% gen_server callbacks
@@ -38,9 +40,8 @@ auth(Socket) ->
     % logger:debug("auth:auth(~p)", [Socket]),
     gen_server:call(auth, {socket, Socket}).
 
-random_name() ->
-    "irina" ++ integer_to_list(random:uniform(1000)).
-
+% random_name() ->
+%     "irina" ++ integer_to_list(random:uniform(1000)).
 
 
 %%%===================================================================
