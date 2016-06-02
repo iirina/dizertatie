@@ -14,7 +14,7 @@
     connected/2,
     is_valid/1,
     disconnected/0,
-    message/1
+    group_message/1
 ]).
 
 %% gen_server callbacks
@@ -47,8 +47,9 @@ is_valid(Name) ->
 disconnected() ->
     gen_server:call(courier, disconnected).
 
-message(Msg) ->
-    gen_server:cast(courier, {msg, lists:flatten(Msg)}).
+%% Sends a message to all chat users.
+group_message(Msg) ->
+    gen_server:cast(courier, {group_msg, lists:flatten(Msg)}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -106,13 +107,13 @@ handle_cast({connected, Name, SocketServerPid}, State) ->
             {noreply, NewState}
     end;
 
-handle_cast({msg, Msg}, State) ->
-    logger:debug("courier:msg() New message ~p", [Msg]),
+handle_cast({group_msg, Msg}, State) ->
+    logger:debug("courier:group_msg() New group message ~p", [Msg]),
     PidToNameList = dict:to_list(State#state.pid_to_name),
     lists:foreach(
         fun(Element) ->
             {Pid, _Name} = Element,
-            socket_handler:send_msg(Msg, Pid)
+            socket_handler:send_msg_to_pid(Msg, Pid)
         end,
         PidToNameList
     ),

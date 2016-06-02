@@ -5,7 +5,7 @@
 
 %% API
 -export([
-    send_msg/2,
+    send_msg_to_pid/2,
     start/1,
     start_link/1
 ]).
@@ -28,9 +28,10 @@
 %%% API
 %%%===================================================================
 
+%%  Sends a message to the user whose corresponding PID is Pid.
 %% Called by the courier.
-send_msg(Msg, Pid) ->
-    logger:debug("socket_handler:send_msg() Message ~p and PID ~p", [Msg, Pid]),
+send_msg_to_pid(Msg, Pid) ->
+    logger:debug("socket_handler:send_msg_to_pid() Message ~p and PID ~p", [Msg, Pid]),
     gen_server:cast(Pid, {message, Msg}).
 
 %% Called by the socket acceptor.
@@ -77,9 +78,8 @@ read(Socket, Name, Pid) ->
     end.
 
 handle_packet(Packet, Name, _GenServerPid) ->
-    %% For now, we only have one other option besides authentication: group
-    %% message.
-    courier:message(chat_utils:format_message(Name, Packet)).
+    %% For now, we only have one other option besides authentication: group message.
+    courier:group_message(chat_utils:format_message(Name, Packet)).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -100,6 +100,7 @@ handle_cast({set_user, User}, {Socket, _Name}) ->
     logger:debug("Setting User ~p for gen_server state.", [User]),
     {noreply, {Socket, User}};
 
+%% Sends the received message through the socket corresponding to this process.
 handle_cast({message, Msg}, {Socket, Name}=State) ->
     logger:debug(
         "socket_handler:handle_cast() Message ~p from ~p Socket ~p", [Msg, Name, Socket]),
@@ -130,7 +131,7 @@ terminate(Reason, State) ->
 	{Socket, Name} = State,
 	inet:close(Socket),
 	chat_utils:log_message(Name, "terminating, pid=~w, reason=~w", [self(), Reason]),
-	courier:message(chat_utils:format_notification(Name,"disconnected")), % inform
+	courier:group_message(chat_utils:format_notification(Name,"disconnected")), % inform
 	courier:disconnected(),
 	ok.
 

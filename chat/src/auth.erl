@@ -29,7 +29,7 @@ handle_auth_packet(Packet, GenServerPid) ->
                     gen_server:cast(GenServerPid, {set_user, User}),
                     gen_server:cast(GenServerPid, {message, ?AUTH_SUCCESSFUL}),
                     %% Informs all chat users about the newly connected user.
-                    courier:message(chat_utils:format_notification(User, "connected.")),
+                    courier:group_message(chat_utils:format_notification(User, "connected.")),
                     logger:debug("socket_handler:handle_auth() Identified user ~p.", [User]),
                     {user, User};
                 false ->
