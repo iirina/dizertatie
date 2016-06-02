@@ -47,15 +47,6 @@ init(_Args) ->
         [courier]
     },
 
-    AuthSpec = {
-        auth,
-        {auth, start_link, []},
-        permanent,
-        brutal_kill,
-        worker,
-        [auth]
-    },
-
-    ChildSpec = [AuthSpec, CourierSpec, SocketHandlerSupSpec, SocketAcceptorSupSpec],
+    ChildSpec = [CourierSpec, SocketHandlerSupSpec, SocketAcceptorSupSpec],
     SupFlags = {one_for_one, 10, 1},
     {ok, {SupFlags, ChildSpec}}.

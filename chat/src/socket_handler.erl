@@ -97,7 +97,7 @@ handle_auth(Packet, Socket, GenServerPid) ->
                     case courier:connected(User, GenServerPid) of
                         ok ->
                             gen_server:cast(GenServerPid, {set_user, User}),
-                            deliver_message(Socket, "authentication_successful\n"),
+                            deliver_message(Socket, auth:authentication_successful()),
                             %% Informs all chat users about the newly connected user.
                             courier:message(chat_utils:format_notification(User, "connected.")),
                             logger:debug("socket_handler:handle_auth() Identified user ~p.", [User]),
@@ -107,7 +107,7 @@ handle_auth(Packet, Socket, GenServerPid) ->
                             %% username meanwhile.
                             logger:info("auth:auth_loop() Username ~p is already in use.", [User]),
                             %% Let the user know the authentication faild.
-                            deliver_message(Socket, "authentication_failed"),
+                            deliver_message(Socket, auth:authentication_failed()),
                             authentication_failed
                     end;
                 false ->
@@ -115,13 +115,13 @@ handle_auth(Packet, Socket, GenServerPid) ->
                     %% again from the socket.
                     logger:info("auth:auth_loop() User ~p can not be authentified.", [User]),
                     %% Let the user know the authentication faild.
-                    deliver_message(Socket, "authentication_failed"),
+                    deliver_message(Socket, auth:authentication_failed()),
                     authentication_failed
             end;
         false ->
             logger:info("auth:auth_loop() Wrong auth message sent: ~p", [Request]),
             %% Let the user know the authentication faild.
-            deliver_message(Socket, "authentication_failed"),
+            deliver_message(Socket, auth:authentication_failed()),
             authentication_failed
     end.
 
