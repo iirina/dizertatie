@@ -20,14 +20,12 @@ string_starts_with(String, StartsWith) ->
 
 
 %% makes a notification of joining, leaving, etc.
-format_notification(Name, String) ->
-	string_timestamp() ++ " " ++ Name ++" "
-		++ lists:filter(fun(X) -> (X /= $\r)and(X /= $\n)end, String).
+format_notification(Name, Action) ->
+	string_timestamp() ++ " " ++ Name ++ " " ++ Action ++ ".".
 
-%% formats a received message that the user typed
-format_message(Name, B) ->
-	string_timestamp() ++ " " ++ Name ++ "> "
-		++ lists:filter(fun(X)->(X /= $\r)and(X /= $\n)end, binary_to_list(B)).
+%% formats a received message that the user typed. Msg is String.
+format_message(Name, Msg) ->
+	string_timestamp() ++ " " ++ Name ++ "> " ++ Msg.
 
 %% saves a log entry: <client address> <message>
 log_message(Name, Format, Args) ->

@@ -24,6 +24,10 @@
     read/3
 ]).
 
+-define(GROUP_MESSAGE_TOKEN, "group").
+-define(CHAT_TOKEN, "chat").
+-define(GET_ONLINE_LIST_TOKEN, "get_online_list").
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -79,7 +83,44 @@ read(Socket, Name, Pid) ->
 
 handle_packet(Packet, Name, _GenServerPid) ->
     %% For now, we only have one other option besides authentication: group message.
-    courier:group_message(chat_utils:format_message(Name, Packet)).
+    case get_action_type(Packet) of
+        {group_message, Message} ->
+            logger:debug("socket_handler:handle_packet() Got action group_message"),
+            courier:group_message(chat_utils:format_message(Name, Message));
+        _Other ->
+            do_nothing
+    end.
+
+get_action_type(Packet) ->
+    Request = chat_utils:trim_string(erlang:binary_to_list(Packet)),
+    logger:debug("socket_handler:get_action_type() Request ~p", [Request]),
+    Tokens = string:tokens(Request, ","),
+    logger:debug("socket_handler:get_action_type() Tokens ~p", [Tokens]),
+    %% TODO verify Tokens has at least 1 element
+    Action = lists:nth(1, Tokens),
+    case Action of
+        ?GROUP_MESSAGE_TOKEN ->
+            %% TODO verify Tokens has 2 elements
+            Message = lists:nth(2, Tokens),
+            logger:debug(
+                "socket_handler:get_action_type() Action group_message and message ~p",
+                    [Message]),
+            {group_message, Message};
+        ?CHAT_TOKEN ->
+            %% TODO verify Tokens has 3 elements
+            To = lists:nth(2, Tokens),
+            Message = lists:nth(3, Tokens),
+            logger:debug(
+                "socket_handler:get_action_type() Action chat, for ~p and message ~p",
+                    [To, Message]),
+            {chat, To, Message};
+        ?GET_ONLINE_LIST_TOKEN ->
+            logger:debug("socket_handler:get_action_type() Action get_online_list"),
+            get_online_list;
+        Other ->
+            logger:debug("socket_handler:get_action_type() Got unknown action: ~p", [Other])
+    end.
+
 
 %%%===================================================================
 %%% gen_server callbacks
