@@ -2,7 +2,7 @@
 
 -export([
     format_notification/2,
-    format_message/2,
+    format_message/3,
     log_message/3,
     log_message/2,
     string_timestamp/0,
@@ -24,8 +24,8 @@ format_notification(Name, Action) ->
 	string_timestamp() ++ " " ++ Name ++ " " ++ Action ++ ".".
 
 %% formats a received message that the user typed. Msg is String.
-format_message(Name, Msg) ->
-	string_timestamp() ++ " " ++ Name ++ "> " ++ Msg.
+format_message(Name, Msg, MessagingType) ->
+	string_timestamp() ++ " " ++ Name ++ " (" ++ MessagingType ++ ")> " ++ Msg.
 
 %% saves a log entry: <client address> <message>
 log_message(Name, Format, Args) ->

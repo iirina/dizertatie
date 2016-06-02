@@ -14,7 +14,8 @@
     connected/2,
     is_valid/1,
     disconnected/0,
-    group_message/1
+    group_message/1,
+    chat/2
 ]).
 
 %% gen_server callbacks
@@ -30,9 +31,9 @@
 
 -record(state, {pid_to_name = dict:new(), name_to_pid = dict:new()}).
 
-%%%===================================================================
+%%%=================================================================================================
 %%% API
-%%%===================================================================
+%%%=================================================================================================
 
 %% Starts the courier server.
 start_link() ->
@@ -51,10 +52,12 @@ disconnected() ->
 group_message(Msg) ->
     gen_server:cast(courier, {group_msg, lists:flatten(Msg)}).
 
-%%%===================================================================
-%%% gen_server callbacks
-%%%===================================================================
+chat(ToUsername, Msg) ->
+    gen_server:cast(courier, {chat, ToUsername, lists:flatten(Msg)}).
 
+%%%=================================================================================================
+%%% gen_server callbacks
+%%%=================================================================================================
 init(_Args) ->
     NewState = #state{pid_to_name = dict:new(), name_to_pid = dict:new()},
 	{ok, NewState}.
@@ -108,7 +111,7 @@ handle_cast({connected, Name, SocketServerPid}, State) ->
     end;
 
 handle_cast({group_msg, Msg}, State) ->
-    logger:debug("courier:group_msg() New group message ~p", [Msg]),
+    logger:debug("courier:handle_cast() group_msg New group message ~p", [Msg]),
     PidToNameList = dict:to_list(State#state.pid_to_name),
     lists:foreach(
         fun(Element) ->
@@ -117,6 +120,21 @@ handle_cast({group_msg, Msg}, State) ->
         end,
         PidToNameList
     ),
+    {noreply, State};
+
+handle_cast({chat, ToUser, Msg}, State) ->
+    logger:debug("courier:handle_cast() chat New message ~p to ~p", [Msg, ToUser]),
+    NameToPidDict = State#state.name_to_pid,
+    case dict:is_key(ToUser, NameToPidDict) of
+        true ->
+            [ToPid] = dict:fetch(ToUser, NameToPidDict),
+            logger:debug("courier:handle_cast() chat Found PID ~p for user ~p.", [ToPid, ToUser]),
+            socket_handler:send_msg_to_pid(Msg, ToPid);
+        false ->
+            logger:debug(
+                "courier:handle_cast() chat There is no user registered with this name ~p.",
+                    [ToUser])
+    end,
     {noreply, State};
 
 handle_cast(OtherRequest, State) ->
@@ -128,7 +146,7 @@ handle_info(Info, State) ->
 	{noreply, State}.
 
 % terminate is called if a handle_* call returns stop
-% dispatcher is brutally killed by chat_supervisor on shutdown
+% courier is brutally killed by chat_supervisor on shutdown
 terminate(Reason, _State) ->
 	logger:info("courier:terminate() Terminating for reason: ~p", [Reason]),
 	ok.

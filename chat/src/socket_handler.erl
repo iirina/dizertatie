@@ -85,8 +85,11 @@ handle_packet(Packet, Name, _GenServerPid) ->
     %% For now, we only have one other option besides authentication: group message.
     case get_action_type(Packet) of
         {group_message, Message} ->
-            logger:debug("socket_handler:handle_packet() Got action group_message"),
-            courier:group_message(chat_utils:format_message(Name, Message));
+            logger:debug("socket_handler:handle_packet() Got action group_message."),
+            courier:group_message(chat_utils:format_message(Name, Message, ?GROUP_MESSAGE_TOKEN));
+        {chat, To, Message} ->
+            logger:debug("socket_handler:handle_packet() Got action chat."),
+            courier:chat(To, chat_utils:format_message(Name, Message, ?CHAT_TOKEN));
         _Other ->
             do_nothing
     end.
@@ -144,10 +147,10 @@ handle_cast({set_user, User}, {Socket, _Name}) ->
 %% Sends the received message through the socket corresponding to this process.
 handle_cast({message, Msg}, {Socket, Name}=State) ->
     logger:debug(
-        "socket_handler:handle_cast() Message ~p from ~p Socket ~p", [Msg, Name, Socket]),
+        "socket_handler:handle_cast() Message ~p to ~p Socket ~p", [Msg, Name, Socket]),
 	case gen_tcp:send(Socket, Msg ++ "\n") of
         ok ->
-            logger:debug("Message ~p was sent.", [Msg]);
+            logger:debug("Message ~p was sent to ~p.", [Msg, Name]);
         {error, Reason} ->
             logger:debug("Message ~p was not sent due to reason ~p", [Msg, Reason])
     end,
