@@ -29,6 +29,11 @@
 -define(GET_FRIENDS_TOKEN, "get_friends").
 -define(ADD_FRIEND_TOKEN, "add_friend").
 -define(REMOVE_FRIEND_TOKEN, "remove_friend").
+-define(ACCEPT_FRIEND_REQUEST_TOKEN, "accept_friend_request").
+-define(REJECT_FRIEND_REQUEST_TOKEN, "reject_friend_request").
+-define(FRIEND_REQUEST, " wants to be your friend.").
+-define(FRIEND_REQUEST_ACCEPTED, " accepted your friend request.").
+-define(FRIEND_REQUEST_REJECTED, " rejected your friend request.").
 
 %%%===================================================================
 %%% API
@@ -83,6 +88,13 @@ read(Socket, Name, Pid) ->
             gen_server:cast(Pid, socket_closed)
     end.
 
+%% User1: trimite la server add_friend,User2
+%%          - Serveru; trimite mesajul <<user requests to be your friend.>> catre User2
+%% User2 primeste de la server <<user requests to be your friend>>
+%%            - User2 trimite la server respond_to_friend_request,yes or respond_to_friend_request,no
+%% Serverul citeste de la User2 mesajul respond_to_friend_request,boolean
+%%            - daca e pozitiv, updateaza ambele liste de prietenii
+%%            - daca e negativ, doar trimite la User1 mesajul <<user rejected your friend request.>>
 handle_packet(Packet, User, GenServerPid) ->
     case get_action_type(Packet) of
         {group_message, Message} ->
@@ -99,7 +111,18 @@ handle_packet(Packet, User, GenServerPid) ->
             gen_server:cast(GenServerPid, {message, "friends:" ++ StringFriendList});
         {add_friend, NewFriend} ->
             logger:debug("socket_handler:handle_packet() Got action add_friend ~p", [NewFriend]),
-            courier:add_friend(User, NewFriend);
+            courier:server_msg(NewFriend, User ++ ?FRIEND_REQUEST);
+        {accept_friend_request, UserRequesting} ->
+            logger:debug("socket_handler:handle_packet() Got action accept_friend_request ~p",
+                [UserRequesting]),
+            courier:add_friend(User, UserRequesting),
+            %% Tell the friend that User accepted the friend request.
+            courier:server_msg(UserRequesting, User ++ ?FRIEND_REQUEST_ACCEPTED);
+        {reject_friend_request, UserRequesting} ->
+            logger:debug("socket_handler:handle_packet() Got action reject_friend_request ~p",
+                [UserRequesting]),
+            %% Tell the friend that User rejected the friend request.
+            courier:server_msg(UserRequesting, User ++ ?FRIEND_REQUEST_REJECTED);
         {remove_friend, Friend} ->
             logger:debug("socket_handler:handle_packet() Got action remove_friend ~p", [Friend]),
             courier:remove_friend(User, Friend);
@@ -139,6 +162,18 @@ get_action_type(Packet) ->
             logger:debug("socket_handler:get_action_type() Action ~p new friend ~p",
                 [?ADD_FRIEND_TOKEN, NewFriend]),
             {add_friend, NewFriend};
+        ?ACCEPT_FRIEND_REQUEST_TOKEN ->
+            %% TODO verify Tokens has 2 elements
+            Friend = lists:nth(2, Tokens),
+            logger:debug("socket_handler:get_action_type() Action ~p friend ~p",
+                [?ACCEPT_FRIEND_REQUEST_TOKEN, Friend]),
+            {accept_friend_request, Friend};
+        ?REJECT_FRIEND_REQUEST_TOKEN ->
+            %% TODO verify Tokens has 2 elements
+            Friend = lists:nth(2, Tokens),
+            logger:debug("socket_handler:get_action_type() Action ~p friend ~p",
+                [?REJECT_FRIEND_REQUEST_TOKEN, Friend]),
+            {reject_friend_request, Friend};
         ?REMOVE_FRIEND_TOKEN ->
             %% TODO verify Tokens has 2 elements
             Friend = lists:nth(2, Tokens),

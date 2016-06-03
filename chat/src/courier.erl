@@ -16,6 +16,7 @@
     disconnected/0,
     group_message/2,
     chat/3,
+    server_msg/2,
     add_friend/2,
     remove_friend/2,
     get_friends/1
@@ -57,8 +58,13 @@ group_message(From, Msg) ->
 chat(FromUser, ToUser, Msg) ->
     gen_server:cast(courier, {chat, FromUser, ToUser, lists:flatten(Msg)}).
 
+%% Sends a message from the server.
+server_msg(ToUser, Msg) ->
+    gen_server:cast(courier, {server_msg, ToUser, lists:flatten(Msg)}).
+
 add_friend(ForUser, NewFriend) ->
-    gen_server:cast(courier, {add_friend, ForUser, NewFriend}).
+    gen_server:cast(courier, {add_friend, ForUser, NewFriend}),
+    gen_server:cast(courier, {add_friend, NewFriend, ForUser}).
 
 remove_friend(ForUser, Friend) ->
     gen_server:cast(courier, {remove_friend, ForUser, Friend}).
@@ -186,8 +192,23 @@ handle_cast({chat, FromUser, ToUser, Msg}, State) ->
         false ->
             logger:debug(
                 "courier:handle_cast() chat There is no user registered with this name ~p"
-                ++ " or the user has no friends.", [ToUser])
+                ++ " or the user has no friends.", [FromUser])
             %% TODO send message to fromuser that the message was not delivered.
+    end,
+    {noreply, State};
+
+ handle_cast({server_msg, ToUser, Msg}, State) ->
+     logger:debug("courier:handle_cast() server_msg New server message ~p to ~p", [Msg, ToUser]),
+     NameToPidDict = State#state.name_to_pid,
+     case dict:is_key(ToUser, NameToPidDict) of
+         true ->
+             [ToPid] = dict:fetch(ToUser, NameToPidDict),
+             logger:debug(
+                "courier:handle_cast() server_msg Found PID ~p for user ~p.", [ToPid, ToUser]),
+             socket_handler:send_msg_to_pid(Msg, ToPid);
+         false ->
+             logger:debug("courier:handle_cast() server_msg User ~p is not registered and message "
+                ++ "~p will not be delievered.", [ToUser, Msg])
     end,
     {noreply, State};
 
