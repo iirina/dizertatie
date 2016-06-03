@@ -26,7 +26,9 @@
 
 -define(GROUP_MESSAGE_TOKEN, "group").
 -define(CHAT_TOKEN, "chat").
--define(GET_ONLINE_LIST_TOKEN, "get_online_list").
+-define(GET_FRIENDS_TOKEN, "get_friends").
+-define(ADD_FRIEND_TOKEN, "add_friend").
+-define(REMOVE_FRIEND_TOKEN, "remove_friend").
 
 %%%===================================================================
 %%% API
@@ -81,14 +83,26 @@ read(Socket, Name, Pid) ->
             gen_server:cast(Pid, socket_closed)
     end.
 
-handle_packet(Packet, Name, _GenServerPid) ->
+handle_packet(Packet, User, GenServerPid) ->
     case get_action_type(Packet) of
         {group_message, Message} ->
             logger:debug("socket_handler:handle_packet() Got action group_message."),
-            courier:group_message(Name, chat_utils:format_message(Name, Message, ?GROUP_MESSAGE_TOKEN));
+            courier:group_message(User, chat_utils:format_message(User, Message, ?GROUP_MESSAGE_TOKEN));
         {chat, To, Message} ->
             logger:debug("socket_handler:handle_packet() Got action chat."),
-            courier:chat(Name, To, chat_utils:format_message(Name, Message, ?CHAT_TOKEN));
+            courier:chat(User, To, chat_utils:format_message(User, Message, ?CHAT_TOKEN));
+        get_friends ->
+            logger:debug("socket_handler:handle_packet() Got action get_friends."),
+            FriendList = courier:get_friends(User),
+            StringFriendList = string:join(FriendList, ","),
+            %% We send the friend list to the user that requested it.
+            gen_server:cast(GenServerPid, {message, "friends:" ++ StringFriendList});
+        {add_friend, NewFriend} ->
+            logger:debug("socket_handler:handle_packet() Got action add_friend ~p", [NewFriend]),
+            courier:add_friend(User, NewFriend);
+        {remove_friend, Friend} ->
+            logger:debug("socket_handler:handle_packet() Got action remove_friend ~p", [Friend]),
+            courier:remove_friend(User, Friend);
         _Other ->
             do_nothing
     end.
@@ -105,20 +119,32 @@ get_action_type(Packet) ->
             %% TODO verify Tokens has 2 elements
             Message = lists:nth(2, Tokens),
             logger:debug(
-                "socket_handler:get_action_type() Action group_message and message ~p",
-                    [Message]),
+                "socket_handler:get_action_type() Action ~p and message ~p",
+                    [?GROUP_MESSAGE_TOKEN, Message]),
             {group_message, Message};
         ?CHAT_TOKEN ->
             %% TODO verify Tokens has 3 elements
             To = lists:nth(2, Tokens),
             Message = lists:nth(3, Tokens),
             logger:debug(
-                "socket_handler:get_action_type() Action chat, for ~p and message ~p",
-                    [To, Message]),
+                "socket_handler:get_action_type() Action ~p, for ~p and message ~p",
+                    [?CHAT_TOKEN, To, Message]),
             {chat, To, Message};
-        ?GET_ONLINE_LIST_TOKEN ->
-            logger:debug("socket_handler:get_action_type() Action get_online_list"),
-            get_online_list;
+        ?GET_FRIENDS_TOKEN ->
+            logger:debug("socket_handler:get_action_type() Action ~p", [?GET_FRIENDS_TOKEN]),
+            get_friends;
+        ?ADD_FRIEND_TOKEN ->
+            %% TODO verify Tokens has 2 elements
+            NewFriend = lists:nth(2, Tokens),
+            logger:debug("socket_handler:get_action_type() Action ~p new friend ~p",
+                [?ADD_FRIEND_TOKEN, NewFriend]),
+            {add_friend, NewFriend};
+        ?REMOVE_FRIEND_TOKEN ->
+            %% TODO verify Tokens has 2 elements
+            Friend = lists:nth(2, Tokens),
+            logger:debug("socket_handler:get_action_type() Action ~p friend ~p",
+                [?ADD_FRIEND_TOKEN, Friend]),
+            {remove_friend, Friend};
         Other ->
             logger:debug("socket_handler:get_action_type() Got unknown action: ~p", [Other])
     end.

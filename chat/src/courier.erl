@@ -18,7 +18,7 @@
     chat/3,
     add_friend/2,
     remove_friend/2,
-    get_friend_list/1
+    get_friends/1
 ]).
 
 %% gen_server callbacks
@@ -51,7 +51,6 @@ is_valid(Name) ->
 disconnected() ->
     gen_server:call(courier, disconnected).
 
-%% Sends a message to all chat users.
 group_message(From, Msg) ->
     gen_server:cast(courier, {group_msg, From, lists:flatten(Msg)}).
 
@@ -64,8 +63,8 @@ add_friend(ForUser, NewFriend) ->
 remove_friend(ForUser, Friend) ->
     gen_server:cast(courier, {remove_friend, ForUser, Friend}).
 
-get_friend_list(ForUser) ->
-    gen_server:call(courier, {get_friend_list, ForUser}).
+get_friends(ForUser) ->
+    gen_server:call(courier, {get_friends, ForUser}).
 
 is_name_of(_User, []) ->
     false;
@@ -114,7 +113,7 @@ handle_call(disconnected, {FromPid, _FromTag}, State) ->
             {reply, ok, State}
     end;
 
-handle_call({get_friend_list, ForUser}, _From, State) ->
+handle_call({get_friends, ForUser}, _From, State) ->
     FriendsDict = State#state.friends,
     case dict:is_key(ForUser, FriendsDict) of
         true ->
@@ -141,7 +140,7 @@ handle_cast({connected, Name, SocketServerPid}, State) ->
         false ->
             NewPidToName = dict:append(SocketServerPid, Name, PidToName),
             NewNameToPid = dict:append(Name, SocketServerPid, NameToPid),
-            logger:info("courier:connected() Name ~p is now connected.", [Name]),
+            logger:info("courier:connected() User ~p is now connected.", [Name]),
             NewState = State#state{pid_to_name = NewPidToName, name_to_pid = NewNameToPid},
             {noreply, NewState}
     end;
@@ -151,14 +150,19 @@ handle_cast({group_msg, FromUser, Msg}, State) ->
     FriendsDict = State#state.friends,
     case dict:is_key(FromUser, FriendsDict) of
         true ->
-        FriendsList = dict:fetch(FromUser, FriendsDict),
-        lists:foreach(
-            fun(Element) ->
-                {_Name, Pid} = Element,
-                socket_handler:send_msg_to_pid(Msg, Pid)
-            end,
-            FriendsList
-        )
+            %% We send the message to all user's friends.
+            FriendsList = dict:fetch(FromUser, FriendsDict),
+            lists:foreach(
+                fun(Element) ->
+                    {_Name, Pid} = Element,
+                    socket_handler:send_msg_to_pid(Msg, Pid)
+                end,
+                FriendsList
+            );
+        false ->
+            logger:debug("courier:handle_cast() group_msg Message ~p was not sent to anyone because"
+                ++ "user ~p has no friends yet.", [Msg, FromUser]),
+            ok
     end,
     {noreply, State};
 
@@ -181,8 +185,8 @@ handle_cast({chat, FromUser, ToUser, Msg}, State) ->
             end;
         false ->
             logger:debug(
-                "courier:handle_cast() chat There is no user registered with this name ~p.",
-                    [ToUser])
+                "courier:handle_cast() chat There is no user registered with this name ~p"
+                ++ " or the user has no friends.", [ToUser])
             %% TODO send message to fromuser that the message was not delivered.
     end,
     {noreply, State};
