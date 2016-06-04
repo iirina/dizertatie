@@ -16,10 +16,7 @@
     disconnected/0,
     group_message/2,
     chat/3,
-    server_msg/2,
-    add_friend/2,
-    remove_friend/2,
-    get_friends/1
+    server_msg/2
 ]).
 
 %% gen_server callbacks
@@ -33,7 +30,7 @@
 ]).
 
 
--record(state, {pid_to_name = dict:new(), name_to_pid = dict:new(), friends = dict:new()}).
+-record(state, {pid_to_name = dict:new(), name_to_pid = dict:new()}).
 
 %%%=================================================================================================
 %%% API
@@ -62,34 +59,12 @@ chat(FromUser, ToUser, Msg) ->
 server_msg(ToUser, Msg) ->
     gen_server:cast(courier, {server_msg, ToUser, lists:flatten(Msg)}).
 
-add_friend(ForUser, NewFriend) ->
-    gen_server:cast(courier, {add_friend, ForUser, NewFriend}),
-    gen_server:cast(courier, {add_friend, NewFriend, ForUser}).
-
-remove_friend(ForUser, Friend) ->
-    gen_server:cast(courier, {remove_friend, ForUser, Friend}).
-
-get_friends(ForUser) ->
-    gen_server:call(courier, {get_friends, ForUser}).
-
-is_name_of(_User, []) ->
-    false;
-
-is_name_of(User, [{Name, Pid} | FriendList]) ->
-    case User == Name of
-        true ->
-            {pid, Pid};
-        false ->
-            is_name_of(User, FriendList)
-    end.
-
-
 %%%=================================================================================================
 %%% gen_server callbacks
 %%%=================================================================================================
 init(_Args) ->
     NewState = #state{
-        pid_to_name = dict:new(), name_to_pid = dict:new(), friends = dict:new()},
+        pid_to_name = dict:new(), name_to_pid = dict:new()},
 	{ok, NewState}.
 
 handle_call({is_valid, Name}, {_FromPid, _FromTag}, State) ->
@@ -119,17 +94,6 @@ handle_call(disconnected, {FromPid, _FromTag}, State) ->
             {reply, ok, State}
     end;
 
-handle_call({get_friends, ForUser}, _From, State) ->
-    FriendsDict = State#state.friends,
-    case dict:is_key(ForUser, FriendsDict) of
-        true ->
-            FriendsNamePidList = dict:fetch(ForUser, FriendsDict),
-            FriendsList = lists:map( fun({Name, _Pid}) -> Name end, FriendsNamePidList),
-            {reply, FriendsList, State};
-        false ->
-            {reply, [], State}
-    end;
-
 handle_call(Request, From, State) ->
     logger:error("courier:handle_call(): Unknown request ~p from PID ~p", [Request, From]),
     {noreply, State}.
@@ -152,48 +116,54 @@ handle_cast({connected, Name, SocketServerPid}, State) ->
     end;
 
 handle_cast({group_msg, FromUser, Msg}, State) ->
-    logger:debug("courier:handle_cast() group_msg New group message ~p", [Msg]),
-    FriendsDict = State#state.friends,
-    case dict:is_key(FromUser, FriendsDict) of
-        true ->
-            %% We send the message to all user's friends.
-            FriendsList = dict:fetch(FromUser, FriendsDict),
+    logger:debug(
+        "courier:handle_cast() group_msg New group message ~p from user ~p", [Msg, FromUser]),
+    case roster:get_friends(FromUser) of
+        {friends_list, []} ->
+            logger:debug("courier:handle_cast() group_msg Did not send message ~p to anyone "
+                ++ "because user ~p has no friends yet.", [Msg, FromUser]);
+        {friends_list, FriendsList} ->
+            logger:debug("Found friend list: ~p for user ~p", [FriendsList, FromUser]),
+            NameToPidDict = State#state.name_to_pid,
             lists:foreach(
-                fun(Element) ->
-                    {_Name, Pid} = Element,
-                    socket_handler:send_msg_to_pid(Msg, Pid)
+                fun(User) ->
+                    case dict:is_key(User, NameToPidDict) of
+                        true ->
+                            [UserPid] = dict:fetch(User, NameToPidDict),
+                            socket_handler:send_msg_to_pid(Msg, UserPid);
+                        false ->
+                            logger:debug("courier:handle_cast() group_msg Could not send message to ~p "
+                            ++ "because (s)he is not regitered on this chat.", [User])
+                    end
                 end,
                 FriendsList
-            );
-        false ->
-            logger:debug("courier:handle_cast() group_msg Message ~p was not sent to anyone because"
-                ++ "user ~p has no friends yet.", [Msg, FromUser]),
-            ok
+            )
     end,
     {noreply, State};
 
 handle_cast({chat, FromUser, ToUser, Msg}, State) ->
     logger:debug("courier:handle_cast() chat New message ~p to ~p", [Msg, ToUser]),
-    FriendsDict = State#state.friends,
-    case dict:is_key(FromUser, FriendsDict) of
+    case roster:are_friends(FromUser, ToUser) of
         true ->
-            %% Check if ToUser is a friend of FromUser.
-            FriendsList = dict:fetch(FromUser, FriendsDict),
-            case is_name_of(ToUser, FriendsList) of
-                {pid, ToPid} ->
-                    logger:debug("courier:handle_cast() chat Found PID ~p for user ~p.", [ToPid, ToUser]),
-                    socket_handler:send_msg_to_pid(Msg, ToPid);
-                false ->
-                    logger:debug(
-                        "courier:handle_cast() chat Could not send message to ~p because (s)he is not a friend.",
-                        [ToUser])
-                    %% TODO send message to fromuser that the message was not delivered.
-            end;
-        false ->
             logger:debug(
-                "courier:handle_cast() chat There is no user registered with this name ~p"
-                ++ " or the user has no friends.", [FromUser])
-            %% TODO send message to fromuser that the message was not delivered.
+                "courier:handle_cast() chat Users ~p and ~p are friends.", [FromUser, ToUser]),
+                %% We need the pid of ToUser.
+                NameToPidDict = State#state.name_to_pid,
+                case dict:is_key(ToUser, NameToPidDict) of
+                    true ->
+                        [ToPid] = dict:fetch(ToUser, NameToPidDict),
+                        logger:debug("courier:handle_cast() chat Found PID ~p for user ~p.",
+                            [ToPid, ToUser]),
+                        socket_handler:send_msg_to_pid(Msg, ToPid);
+                    false ->
+                        logger:debug("courier:handle_cast() chat Could not send message ~p to user"
+                            ++ "~p because (s)he is not regitered on this chat.", [Msg, ToUser])
+                         %% TODO send message to FromUser that the message was not delivered.
+                 end;
+         false ->
+             logger:debug("courier:handle_cast() chat Could not send message to ~p because (s)he is"
+                " not a friend of ~p.", [ToUser, FromUser])
+            %% TODO send message to FromUser that the message was not delivered.
     end,
     {noreply, State};
 
@@ -211,27 +181,6 @@ handle_cast({chat, FromUser, ToUser, Msg}, State) ->
                 ++ "~p will not be delievered.", [ToUser, Msg])
     end,
     {noreply, State};
-
-handle_cast({add_friend, ForUser, NewFriend}, State) ->
-    logger:debug("courier:handle_cast() add_friend Will add new friend ~p for user ~p",
-        [NewFriend, ForUser]),
-    FriendsDict = State#state.friends,
-    NameToPidDict = State#state.name_to_pid,
-    case dict:is_key(ForUser, NameToPidDict) of
-        true ->
-            [NewFriendPid] = dict:fetch(NewFriend, NameToPidDict),
-            NewFriendsDict = dict:append(ForUser, {NewFriend, NewFriendPid}, FriendsDict),
-            logger:debug(
-                "courier:handle_cast() add_friend Added friend ~p for ~p", [NewFriend, ForUser]),
-            {noreply, State#state{friends = NewFriendsDict}};
-        false ->
-            {noreply, State}
-    end;
-
-handle_cast({remove_friend, _ForUser, _NewFriend}, State) ->
-    %% TODO
-    {noreply, State};
-
 
 handle_cast(OtherRequest, State) ->
     logger:error("courier:handle_cast() Unknown cast request <<~p>>", [OtherRequest]),

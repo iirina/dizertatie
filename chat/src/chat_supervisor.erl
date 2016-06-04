@@ -47,6 +47,15 @@ init(_Args) ->
         [courier]
     },
 
-    ChildSpec = [CourierSpec, SocketHandlerSupSpec, SocketAcceptorSupSpec],
+    RosterSpec = {
+        roster,
+        {roster, start_link, []},
+        permanent,
+        brutal_kill,
+        worker,
+        [roster]
+    },
+
+    ChildSpec = [RosterSpec, CourierSpec, SocketHandlerSupSpec, SocketAcceptorSupSpec],
     SupFlags = {one_for_one, 10, 1},
     {ok, {SupFlags, ChildSpec}}.
