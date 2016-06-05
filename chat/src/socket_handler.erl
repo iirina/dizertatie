@@ -68,13 +68,17 @@ read(Socket, Name, Pid) ->
             case Name of
                 undefined ->
                     %% In this case, the Name is undefined, so auth is mandatory.
-                    case auth:handle_auth_packet(Packet, Pid) of
+                    logger:debug(
+                        "socket_handler:read() undefined name: Packet ~p, Pid ~p", [Packet, Pid]),
+                    case chat_auth:handle_auth_packet(Packet, Pid) of
                         {user, User} ->
                             read(Socket, User, Pid);
                         _Other ->
                             read(Socket, undefined, Pid)
                     end;
                 _Other ->
+                    Users = p1_mysql:fetch("1234", "select * from user"),
+                    logger:debug("socket_handler:read() Users in mysql: ~p", [Users]),
                     %% Here, the user is authenticated as Name.
                     handle_packet(Packet, Name, Pid),
                     read(Socket, Name, Pid)
