@@ -121,7 +121,7 @@ handle_call({are_friends, User1, User2}, _From, State) ->
             IsFriend = is_name_of(User2, FriendsTuples),
             logger:debug("roster:handle_call() are_friends(~s,~s) ~p [looked in tab ~p]",
                 [User1, User2, IsFriend, ?LATEST_TAB]),
-            logger:debug("roster:handle_call() are_friends(~s,~s) FriendsTuples ~p", 
+            logger:debug("roster:handle_call() are_friends(~s,~s) FriendsTuples ~p",
                 [User1, User2, FriendsTuples]),
             update_latest_tab(User1, User2, Now),
             update_latest_tab(User2, User1, Now),
@@ -132,11 +132,27 @@ handle_call(OtherRequest, _From, State) ->
     logger:error("roster:handle_call() Unknown cast request ~p", [OtherRequest]),
     {noreply, State}.
 
+delete_friendship_from_latest_tab(User, Friend) ->
+    UserFriends = ets:lookup(?LATEST_TAB, User),
+    lists:foreach(
+        fun({_User, UserFriend, IsFriend, Timestamp}) ->
+            case User == Friend of
+                true ->
+                    ets:delete_object(?LATEST_TAB, {User, UserFriend, IsFriend, Timestamp});
+                false ->
+                    ok
+            end
+        end,
+        UserFriends
+    ).
+
 handle_cast({add_friend, User1, User2}, State) ->
     ets:insert(?ALL_TAB, {User1, User2}),
     ets:insert(?ALL_TAB, {User2, User1}),
 
     Now = now(),
+    delete_friendship_from_latest_tab(User1, User2),
+    delete_friendship_from_latest_tab(User2, User1),
     ets:insert(?LATEST_TAB, {User1, User2, true, Now}),
     ets:insert(?LATEST_TAB, {User2, User1, true, Now}),
 

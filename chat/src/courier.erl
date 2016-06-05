@@ -19,7 +19,7 @@
     server_msg/2
 ]).
 
-%% gen_server callbacks
+%% gen_serv er callbacks
 -export([
     init/1,
     handle_call/3,
@@ -29,7 +29,8 @@
     terminate/2
 ]).
 
-
+%% The state of this gen_server is relevant only for the connected users.
+%% Registered users that are offline can be fetch from the registration gen_server.
 -record(state, {pid_to_name = dict:new(), name_to_pid = dict:new()}).
 
 %%%=================================================================================================

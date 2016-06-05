@@ -56,6 +56,21 @@ init(_Args) ->
         [roster]
     },
 
-    ChildSpec = [RosterSpec, CourierSpec, SocketHandlerSupSpec, SocketAcceptorSupSpec],
+    RegistrationSpec = {
+        registration,
+        {registration, start_link, []},
+        permanent,
+        brutal_kill,
+        worker,
+        [registration]
+    },
+
+    ChildSpec = [
+        RegistrationSpec,
+        RosterSpec,
+        CourierSpec,
+        SocketHandlerSupSpec,
+        SocketAcceptorSupSpec
+    ],
     SupFlags = {one_for_one, 10, 1},
     {ok, {SupFlags, ChildSpec}}.
