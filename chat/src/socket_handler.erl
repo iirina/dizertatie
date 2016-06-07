@@ -60,6 +60,7 @@ start_link(Args) ->
 %%%===================================================================
 read(Socket, Name, Pid) ->
     logger:debug("socket_handler:read() Ready to read."),
+    registration:load_users(),
     case gen_tcp:recv(Socket, 0) of
         {ok, Packet} ->
             logger:debug("socket_handler:loop() Reading for PID ~p, message ~p",

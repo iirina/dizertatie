@@ -83,6 +83,7 @@ is_auth_request(Request) ->
     case string:equal(AuthToken, ?AUTH_TOKEN) of
         true ->
             User = lists:nth(2, Tokens),
+            % Password = chat_utils:trim_string(lists:nth(3, Tokens)),
             logger:debug("chat_auth:is_auth_request() User ~p", [User]),
             {user, User};
         false ->
@@ -96,7 +97,7 @@ is_registration_request(Request) ->
     case string:equal(RegistrationToken, ?REGISTRATION_TOKEN) of
         true ->
             User = lists:nth(2, Tokens),
-            Password = lists:nth(3, Tokens),
+            Password = chat_utils:trim_string(lists:nth(3, Tokens)),
             logger:debug("chat_auth:is_registration_request() User ~p Password ~p", [User, Password]),
             {user, User, Password};
         false ->
