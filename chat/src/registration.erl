@@ -32,6 +32,7 @@
 
 -define(MYSQL_ID, "1234").
 -define(FETCH_ALL_USERS_MYSQL, "select * from user").
+-define(INSERT_USERS_INTO_MYSQL, "insert into user values ").
 
 -record(state, {all_registered = sets:new()}).
 
@@ -63,7 +64,7 @@ fetch_users_from_mysql() ->
             Users = lists:map(
                 fun([User, Pass]) ->
                     logger:debug(
-                        "roster:fetch_users_from_mysql() User ~p password ~p", [User, Pass]),
+                        "registration:fetch_users_from_mysql() User ~p password ~p", [User, Pass]),
                     User
                 end,
                 UsersRetrieved
@@ -74,8 +75,8 @@ fetch_users_from_mysql() ->
     end.
 
 get_latest_registered_users_before('$end_of_table', Entries, _Timestamp) ->
-    logger:debug(
-        "registration:get_latest_registered_users_before $end_of_table entries: ~p", [Entries]),
+    % logger:debug(
+    %     "registration:get_latest_registered_users_before $end_of_table entries: ~p", [Entries]),
     Entries;
 
 get_latest_registered_users_before(Key, {StringEntries, ObjectList}, Timestamp) ->
@@ -87,10 +88,18 @@ get_latest_registered_users_before(Key, {StringEntries, ObjectList}, Timestamp) 
         fun({User, Password, CurrTimestamp}, {CurrString, CurrObjectList}) ->
             if
                 (CurrTimestamp < Timestamp) ->
-                    {
-                        CurrString ++ "\n(\"" ++ User ++ "\", \"" ++ Password ++ "\")",
-                        lists:append([{User, Password, CurrTimestamp}], CurrObjectList)
-                    };
+                    case CurrString of
+                        "" ->
+                            {
+                                "(\"" ++ User ++ "\", \"" ++ Password ++ "\") ",
+                                lists:append([{User, Password, CurrTimestamp}], CurrObjectList)
+                            };
+                        _Other ->
+                            {
+                                CurrString ++ ", (\"" ++ User ++ "\", \"" ++ Password ++ "\") ",
+                                lists:append([{User, Password, CurrTimestamp}], CurrObjectList)
+                            }
+                    end;
                 (CurrTimestamp > Timestamp) ->
                     ""
             end
@@ -227,18 +236,19 @@ handle_info(drop_registered_users, State) ->
     Empty = {"", []},
     case get_latest_registered_users_before(ets:first(?LATEST_REGISTERED_ADDED_TAB), Empty, Now) of
         {"", []} ->
-            logger:debug("registration:handle_info() drop_registered_users No entries found.");
+            % logger:debug("registration:handle_info() drop_registered_users No entries found.");
+            ok;
         {Entries, ObjectList} ->
             logger:debug("registration:handle_info() drop_registered_users ~p Entries", [Entries]),
             lists:foreach(
                 fun(Object) ->
-                    ets:delete_object(?LATEST_REGISTERED_ADDED_TAB, Object),
-                    logger:debug("registration:handle_info() drop_registered_users, Deleted object:"
-                        ++ " ~p from ets ~p", [Object, ?LATEST_REGISTERED_ADDED_TAB])
+                    ets:delete_object(?LATEST_REGISTERED_ADDED_TAB, Object)
+                    % logger:debug("registration:handle_info() drop_registered_users, Deleted object:"
+                    %     ++ " ~p from ets ~p", [Object, ?LATEST_REGISTERED_ADDED_TAB])
                 end,
                 ObjectList
             ),
-            MySqlInsertCommand = "insert into user values " ++ Entries,
+            MySqlInsertCommand = ?INSERT_USERS_INTO_MYSQL ++ Entries,
             Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand),
             logger:debug(
                 "registration:handle_info() drop_registered_users, MySql result: ~p", [Result])
@@ -251,9 +261,9 @@ handle_info(update_latest_used_tab, State) ->
     ObjToDelete = get_latest_used_before(ets:first(?LATEST_REGISTERED_USED_TAB), [], Now),
     lists:foreach(
         fun(Object) ->
-            ets:delete_object(?LATEST_REGISTERED_USED_TAB, Object),
-            logger:debug("registration:handle_info() update_latest_used_tab, Deleted object: ~p "
-            ++ "from ets ~p", [Object, ?LATEST_REGISTERED_USED_TAB])
+            ets:delete_object(?LATEST_REGISTERED_USED_TAB, Object)
+            % logger:debug("registration:handle_info() update_latest_used_tab, Deleted object: ~p "
+            % ++ "from ets ~p", [Object, ?LATEST_REGISTERED_USED_TAB])
         end,
         ObjToDelete
     ),

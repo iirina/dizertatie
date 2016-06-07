@@ -60,7 +60,6 @@ start_link(Args) ->
 %%%===================================================================
 read(Socket, Name, Pid) ->
     logger:debug("socket_handler:read() Ready to read."),
-    registration:load_users(),
     case gen_tcp:recv(Socket, 0) of
         {ok, Packet} ->
             logger:debug("socket_handler:loop() Reading for PID ~p, message ~p",
@@ -194,7 +193,7 @@ get_action_type(Packet) ->
 %%%===================================================================
 init(Args) ->
     {socket, Socket} = Args,
-    logger:debug("socket_handler:init() Initializing socket_handler."),
+    logger:debug("socket_handler:init() Initializing socket_handler."),    
     spawn_link(socket_handler, read, [Socket, undefined, self()]),
     %% We set the Name undefined for now and wait for it to be set properly when the
     %% authentication is successful.
