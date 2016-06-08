@@ -75,7 +75,7 @@ init(_Args) ->
 handle_call(get_id, _From, State) ->
     Id = State#state.id,
     logger:debug("generator:handle_call() get_id ~p", [Id]),
-    {reply, Id, State#state{id = Id + 1}};
+    {reply, integer_to_list(Id), State#state{id = Id + 1}};
 
 handle_call(get_name, _From, State) ->
     Names = State#state.names,
