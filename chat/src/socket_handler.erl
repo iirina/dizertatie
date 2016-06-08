@@ -77,8 +77,6 @@ read(Socket, Name, Pid) ->
                             read(Socket, undefined, Pid)
                     end;
                 _Other ->
-                    Users = p1_mysql:fetch("1234", "select * from user"),
-                    logger:debug("socket_handler:read() Users in mysql: ~p", [Users]),
                     %% Here, the user is authenticated as Name.
                     handle_packet(Packet, Name, Pid),
                     read(Socket, Name, Pid)
@@ -100,33 +98,33 @@ read(Socket, Name, Pid) ->
 %%            - daca e negativ, doar trimite la User1 mesajul <<user rejected your friend request.>>
 handle_packet(Packet, User, GenServerPid) ->
     case get_action_type(Packet) of
-        {group_message, Message} ->
-            logger:debug("socket_handler:handle_packet() Got action group_message."),
-            courier:group_message(User, chat_utils:format_message(User, Message, ?GROUP_MESSAGE_TOKEN));
-        {chat, To, Message} ->
+        {group_message, Id, Message} ->
+            logger:debug("socket_handler:handle_packet() Got action group_message id ~p.", [Id]),
+            courier:group_message(Id, User, chat_utils:format_message(User, Message, ?GROUP_MESSAGE_TOKEN));
+        {chat, Id, To, Message} ->
             logger:debug("socket_handler:handle_packet() Got action chat."),
             courier:chat(User, To, chat_utils:format_message(User, Message, ?CHAT_TOKEN));
-        get_friends ->
+        {get_friends, Id} ->
             logger:debug("socket_handler:handle_packet() Got action get_friends."),
             {friends_list, FriendsList} = roster:get_friends(User),
             StringFriendList = string:join(FriendsList, ","),
             %% We send the friend list to the user that requested it.
             gen_server:cast(GenServerPid, {message, "friends:" ++ StringFriendList});
-        {add_friend, NewFriend} ->
+        {add_friend, Id, NewFriend} ->
             logger:debug("socket_handler:handle_packet() Got action add_friend ~p", [NewFriend]),
             courier:server_msg(NewFriend, User ++ ?FRIEND_REQUEST);
-        {accept_friend_request, UserRequesting} ->
+        {accept_friend_request, Id, UserRequesting} ->
             logger:debug("socket_handler:handle_packet() Got action accept_friend_request ~p",
                 [UserRequesting]),
             roster:add_friend(User, UserRequesting),
             %% Tell the friend that User accepted the friend request.
             courier:server_msg(UserRequesting, User ++ ?FRIEND_REQUEST_ACCEPTED);
-        {reject_friend_request, UserRequesting} ->
+        {reject_friend_request, Id, UserRequesting} ->
             logger:debug("socket_handler:handle_packet() Got action reject_friend_request ~p",
                 [UserRequesting]),
             %% Tell the friend that User rejected the friend request.
             courier:server_msg(UserRequesting, User ++ ?FRIEND_REQUEST_REJECTED);
-        {remove_friend, Friend} ->
+        {remove_friend, Id, Friend} ->
             logger:debug("socket_handler:handle_packet() Got action remove_friend ~p", [Friend]),
             roster:remove_friend(User, Friend);
         _Other ->
@@ -138,53 +136,55 @@ get_action_type(Packet) ->
     logger:debug("socket_handler:get_action_type() Request ~p", [Request]),
     Tokens = string:tokens(Request, ","),
     logger:debug("socket_handler:get_action_type() Tokens ~p", [Tokens]),
-    %% TODO verify Tokens has at least 1 element
-    Action = lists:nth(1, Tokens),
+    %% TODO verify Tokens has at least 2 element
+    Id = lists:nth(1, Tokens),
+    Action = lists:nth(2, Tokens),
     case Action of
         ?GROUP_MESSAGE_TOKEN ->
             %% TODO verify Tokens has 2 elements
-            Message = lists:nth(2, Tokens),
+            Message = lists:nth(3, Tokens),
             logger:debug(
                 "socket_handler:get_action_type() Action ~p and message ~p",
                     [?GROUP_MESSAGE_TOKEN, Message]),
-            {group_message, Message};
+            {group_message, Id, Message};
         ?CHAT_TOKEN ->
             %% TODO verify Tokens has 3 elements
-            To = lists:nth(2, Tokens),
-            Message = lists:nth(3, Tokens),
+            To = lists:nth(3, Tokens),
+            Message = lists:nth(4, Tokens),
             logger:debug(
                 "socket_handler:get_action_type() Action ~p, for ~p and message ~p",
                     [?CHAT_TOKEN, To, Message]),
-            {chat, To, Message};
+            {chat, Id, To, Message};
         ?GET_FRIENDS_TOKEN ->
             logger:debug("socket_handler:get_action_type() Action ~p", [?GET_FRIENDS_TOKEN]),
-            get_friends;
+            {get_friends, Id};
         ?ADD_FRIEND_TOKEN ->
-            %% TODO verify Tokens has 2 elements
-            NewFriend = lists:nth(2, Tokens),
+            %% TODO verify Tokens has 3 elements
+            NewFriend = lists:nth(3, Tokens),
             logger:debug("socket_handler:get_action_type() Action ~p new friend ~p",
                 [?ADD_FRIEND_TOKEN, NewFriend]),
-            {add_friend, NewFriend};
+            {add_friend, Id, NewFriend};
         ?ACCEPT_FRIEND_REQUEST_TOKEN ->
-            %% TODO verify Tokens has 2 elements
-            Friend = lists:nth(2, Tokens),
+            %% TODO verify Tokens has 3 elements
+            Friend = lists:nth(3, Tokens),
             logger:debug("socket_handler:get_action_type() Action ~p friend ~p",
                 [?ACCEPT_FRIEND_REQUEST_TOKEN, Friend]),
-            {accept_friend_request, Friend};
+            {accept_friend_request, Id, Friend};
         ?REJECT_FRIEND_REQUEST_TOKEN ->
-            %% TODO verify Tokens has 2 elements
-            Friend = lists:nth(2, Tokens),
+            %% TODO verify Tokens has 3 elements
+            Friend = lists:nth(3, Tokens),
             logger:debug("socket_handler:get_action_type() Action ~p friend ~p",
                 [?REJECT_FRIEND_REQUEST_TOKEN, Friend]),
-            {reject_friend_request, Friend};
+            {reject_friend_request, Id, Friend};
         ?REMOVE_FRIEND_TOKEN ->
-            %% TODO verify Tokens has 2 elements
-            Friend = lists:nth(2, Tokens),
+            %% TODO verify Tokens has 3 elements
+            Friend = lists:nth(3, Tokens),
             logger:debug("socket_handler:get_action_type() Action ~p friend ~p",
                 [?ADD_FRIEND_TOKEN, Friend]),
-            {remove_friend, Friend};
+            {remove_friend, Id, Friend};
         Other ->
-            logger:debug("socket_handler:get_action_type() Got unknown action: ~p", [Other])
+            logger:debug("socket_handler:get_action_type() Got unknown action: ~p", [Other]),
+            other
     end.
 
 
@@ -193,7 +193,7 @@ get_action_type(Packet) ->
 %%%===================================================================
 init(Args) ->
     {socket, Socket} = Args,
-    logger:debug("socket_handler:init() Initializing socket_handler."),    
+    logger:debug("socket_handler:init() Initializing socket_handler."),
     spawn_link(socket_handler, read, [Socket, undefined, self()]),
     %% We set the Name undefined for now and wait for it to be set properly when the
     %% authentication is successful.
@@ -238,7 +238,7 @@ terminate(Reason, State) ->
 	{Socket, Name} = State,
 	inet:close(Socket),
 	chat_utils:log_message(Name, "terminating, pid=~w, reason=~w", [self(), Reason]),
-	courier:group_message(chat_utils:format_notification(Name,"disconnected")), % inform
+	courier:group_message("server", chat_utils:format_notification(Name,"disconnected")), % inform
 	courier:disconnected(),
 	ok.
 

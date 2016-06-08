@@ -14,7 +14,7 @@
     connected/2,
     is_valid/1,
     disconnected/0,
-    group_message/2,
+    group_message/3,
     chat/3,
     server_msg/2
 ]).
@@ -28,6 +28,10 @@
     code_change/3,
     terminate/2
 ]).
+
+-define(MESSAGE_SENT, "message_sent").
+-define(GROUP_MESSAGE_SENT, "group_message_sent").
+-define(NO_FRIENDS, "no_friends").
 
 %% The state of this gen_server is relevant only for the connected users.
 %% Registered users that are offline can be fetch from the registration gen_server.
@@ -50,8 +54,8 @@ is_valid(Name) ->
 disconnected() ->
     gen_server:call(courier, disconnected).
 
-group_message(From, Msg) ->
-    gen_server:cast(courier, {group_msg, From, lists:flatten(Msg)}).
+group_message(MsgId, From, Msg) ->
+    gen_server:cast(courier, {group_msg, MsgId, From, lists:flatten(Msg)}).
 
 chat(FromUser, ToUser, Msg) ->
     gen_server:cast(courier, {chat, FromUser, ToUser, lists:flatten(Msg)}).
@@ -116,16 +120,20 @@ handle_cast({connected, Name, SocketServerPid}, State) ->
             {noreply, NewState}
     end;
 
-handle_cast({group_msg, FromUser, Msg}, State) ->
+handle_cast({group_msg, MsgId, FromUser, Msg}, State) ->
     logger:debug(
         "courier:handle_cast() group_msg New group message ~p from user ~p", [Msg, FromUser]),
+    NameToPidDict = State#state.name_to_pid,
+    [FromUserPid] = dict:fetch(FromUser, NameToPidDict),
+
     case roster:get_friends(FromUser) of
         {friends_list, []} ->
             logger:debug("courier:handle_cast() group_msg Did not send message ~p to anyone "
-                ++ "because user ~p has no friends yet.", [Msg, FromUser]);
+                ++ "because user ~p has no friends yet.", [Msg, FromUser]),
+            socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?NO_FRIENDS, FromUserPid);
         {friends_list, FriendsList} ->
             logger:debug("Found friend list: ~p for user ~p", [FriendsList, FromUser]),
-            NameToPidDict = State#state.name_to_pid,
+
             lists:foreach(
                 fun(User) ->
                     case dict:is_key(User, NameToPidDict) of
@@ -138,7 +146,8 @@ handle_cast({group_msg, FromUser, Msg}, State) ->
                     end
                 end,
                 FriendsList
-            )
+            ),
+            socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?GROUP_MESSAGE_SENT, FromUserPid)
     end,
     {noreply, State};
 

@@ -24,6 +24,12 @@
 -define(DEFAULT_PORT, 5455).
 -define(DEFAULT_SERVER, localhost).
 
+-define(MYSQL_ID, "1234").
+-define(INSERT_BENCHMARK_INTO_MYSQL, "insert into benchmark values ").
+
+%% Time expressed in ms.
+-define(TIME_TO_DROP_BENCHMARK, 10 * 1000).
+
 -record(state, {username, password, socket, bmList}).
 
 %%%=================================================================================================
@@ -68,7 +74,8 @@ read(Socket, ClientPid) ->
                 logger:debug("chat_client:read() Reading for PID ~p, message ~p",
                     [ClientPid, Packet]),
                 Now = now(),
-                MsgId = get_id(Packet),
+                % MsgId = get_id(Packet),
+                MsgId = generator:get_id(),
                 gen_server:cast(ClientPid, {add_bm_msg, [{MsgId, "recv", Now}]});
             {error, closed} ->
                 logger:debug("chat_client:loop() Stopped reading for in PID ~p. Socket closed.",
@@ -76,6 +83,40 @@ read(Socket, ClientPid) ->
                 unlink(ClientPid),
                 gen_server:cast(ClientPid, socket_closed)
         end.
+
+add_timer() ->
+    case timer:send_interval(?TIME_TO_DROP_BENCHMARK, drop_benchmark) of
+        {ok, _Tref} ->
+            logger:debug("chat_client:add_timer() Timer set for drop_benchmark");
+        {error, Error} ->
+            logger:error(
+                "chat_client:add_timer() Timer was not set for drop_benchmark ~p", [Error])
+    end.
+
+get_string_timestamp(Timestamp) ->
+    {Mega,Sec,Micro} = Timestamp,
+    IntTimestamp = (Mega * 1000000 + Sec) * 1000000 + Micro,
+    integer_to_list(IntTimestamp).
+
+maybe_add_comma(CurrString) ->
+    case CurrString of
+        "" -> "";
+        _Other -> CurrString ++ ","
+    end.
+
+get_elements_before([], Result, _Timestamp) ->
+    Result;
+
+get_elements_before([{Id, Type, CurrTimestamp} | RestOfList], {CurrString, CurrList}, Timestamp) ->
+    case CurrTimestamp < Timestamp of
+        true ->
+            NewString = maybe_add_comma(CurrString) ++ " (\"" ++ integer_to_list(Id) ++ "\", \"" ++
+                Type ++ "\", \"" ++ get_string_timestamp(CurrTimestamp) ++ "\")",
+            NewList = lists:append(CurrList, [{Id, Type, CurrTimestamp}]),
+            get_elements_before(RestOfList, {NewString, NewList}, Timestamp);
+        false ->
+            ok
+    end.
 
 %%%=================================================================================================
 %%% gen_server callbacks
@@ -91,6 +132,7 @@ init({Username, Password}) ->
             logger:info("chat_client:init() User ~p connected to ~p:~p", [Username, Host, Port]),
             bm_generator:add_pid(self()),
             spawn_link(chat_client, read, [Socket, self()]),
+            add_timer(),
             {ok, #state{username = Username, password = Password, socket = Socket, bmList = []}};
         {error, Reason} ->
             {error, Reason}
@@ -172,6 +214,32 @@ handle_cast({add_bm_msg, List}, State) ->
 handle_cast(OtherRequest, State) ->
     logger:error("chat_client:handle_cast() Unknown cast request <<~p>>", [OtherRequest]),
     {noreply, State}.
+
+handle_info(drop_benchmark, State) ->
+    BmList = State#state.bmList,
+    Now = now(),
+    Empty = {"", []},
+    {StringBm, BmListBefore} = get_elements_before(BmList, Empty, Now),
+    logger:debug("chat_client:handle_info() drop_benchmark StringBM ~p BmListBefore ~p",
+        [StringBm, BmListBefore]),
+    case BmListBefore of
+        [] ->
+            {noreply, State};
+        _Other ->
+            NewList = lists:foldl(
+                fun(Element, BmListIn) ->
+                    lists:delete(Element, BmListIn)
+                end,
+                BmList,
+                BmListBefore
+            ),
+            MySqlInsertCommand = ?INSERT_BENCHMARK_INTO_MYSQL ++ StringBm,
+            Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand),
+            logger:debug(
+                "chat_client:handle_info() drop_benchmark MySql result: ~p", [Result]),
+            {noreply, State#state{bmList = NewList}}
+    end;
+
 
 handle_info(Info, State) ->
     gen_server:cast(self(), Info),
