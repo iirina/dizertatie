@@ -19,7 +19,7 @@
     server_msg/2
 ]).
 
-%% gen_servfi  er callbacks
+%% gen_server callbacks
 -export([
     init/1,
     handle_call/3,
