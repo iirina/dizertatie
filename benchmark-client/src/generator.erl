@@ -18,6 +18,9 @@
     terminate/2
 ]).
 
+-define(FETCH_ALL_USERS_MYSQL, "select * from user").
+-define(MYSQL_ID, "1234").
+
 -record(state, {id, names}).
 
 %%%=================================================================================================
@@ -33,6 +36,9 @@ get_id() ->
 get_name() ->
     gen_server:call(generator, get_name).
 
+%%%=================================================================================================
+%%% Helper functions
+%%%=================================================================================================
 get_unique_name(UsedNamesSet) ->
     Name = "irina" ++ integer_to_list(random:uniform(100000)),
     case sets:is_element(Name, UsedNamesSet) of
@@ -42,12 +48,29 @@ get_unique_name(UsedNamesSet) ->
             Name
     end.
 
+fetch_users_from_mysql() ->
+    case p1_mysql:fetch(?MYSQL_ID, ?FETCH_ALL_USERS_MYSQL) of
+        {data, {p1_mysql_result, _FieldList, UsersRetrieved, _Number, _List}} ->
+            Users = lists:map(
+                fun([User, Pass]) ->
+                    logger:debug(
+                        "registration:fetch_users_from_mysql() User ~p password ~p", [User, Pass]),
+                    User
+                end,
+                UsersRetrieved
+            ),
+            Users;
+        _Other ->
+            []
+    end.
+
 %%%=================================================================================================
 %%% gen_server callbacks
 %%%=================================================================================================
 init(_Args) ->
     random:seed(erlang:now()),
-    {ok, #state{id = 1, names = sets:new()}}.
+    Names = sets:from_list(fetch_users_from_mysql()),
+    {ok, #state{id = 1, names = Names}}.
 
 handle_call(get_id, _From, State) ->
     Id = State#state.id,
