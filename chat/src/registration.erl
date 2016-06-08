@@ -23,8 +23,8 @@
 
 -define(LATEST_REGISTERED_USED_TAB, latest_registered_used_tab).
 -define(LATEST_REGISTERED_ADDED_TAB, latest_registered_added_tab).
--define(USER_TAKEN, "User is already used by someone else.").
--define(REGISTRATION_COMPLETED, "Registration was completed.").
+-define(USER_TAKEN, "user_taken").
+-define(REGISTRATION_COMPLETED, "registration_completed").
 
 %% Time expressed in milliseconds.
 -define(TIME_TO_DROP_REGISTERED_USERS, 10 * 1000). %% 1 * 60 * 1000

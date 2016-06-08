@@ -35,6 +35,9 @@
 -define(FRIEND_REQUEST_ACCEPTED, " accepted your friend request.").
 -define(FRIEND_REQUEST_REJECTED, " rejected your friend request.").
 
+-define(FRIENDSHIP_REQUEST_SENT, "friendship_request_sent").
+-define(FRIENDSHIP_STATUS_SENT, "friendship_status_sent").
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -103,30 +106,34 @@ handle_packet(Packet, User, GenServerPid) ->
             courier:group_message(Id, User, chat_utils:format_message(User, Message, ?GROUP_MESSAGE_TOKEN));
         {chat, Id, To, Message} ->
             logger:debug("socket_handler:handle_packet() Got action chat."),
-            courier:chat(User, To, chat_utils:format_message(User, Message, ?CHAT_TOKEN));
+            courier:chat(Id, User, To, chat_utils:format_message(User, Message, ?CHAT_TOKEN));
         {get_friends, Id} ->
             logger:debug("socket_handler:handle_packet() Got action get_friends."),
             {friends_list, FriendsList} = roster:get_friends(User),
             StringFriendList = string:join(FriendsList, ","),
             %% We send the friend list to the user that requested it.
-            gen_server:cast(GenServerPid, {message, "friends:" ++ StringFriendList});
+            gen_server:cast(GenServerPid, {message, Id ++ ",friends:" ++ StringFriendList});
         {add_friend, Id, NewFriend} ->
             logger:debug("socket_handler:handle_packet() Got action add_friend ~p", [NewFriend]),
-            courier:server_msg(NewFriend, User ++ ?FRIEND_REQUEST);
+            courier:server_msg(NewFriend, User ++ ?FRIEND_REQUEST),
+            gen_server:cast(GenServerPid, {message, Id ++ "," ++ ?FRIENDSHIP_REQUEST_SENT});
         {accept_friend_request, Id, UserRequesting} ->
             logger:debug("socket_handler:handle_packet() Got action accept_friend_request ~p",
                 [UserRequesting]),
             roster:add_friend(User, UserRequesting),
             %% Tell the friend that User accepted the friend request.
-            courier:server_msg(UserRequesting, User ++ ?FRIEND_REQUEST_ACCEPTED);
+            courier:server_msg(UserRequesting, User ++ ?FRIEND_REQUEST_ACCEPTED),
+            gen_server:cast(GenServerPid, {message, Id ++ "," ++ ?FRIENDSHIP_STATUS_SENT});
         {reject_friend_request, Id, UserRequesting} ->
             logger:debug("socket_handler:handle_packet() Got action reject_friend_request ~p",
                 [UserRequesting]),
             %% Tell the friend that User rejected the friend request.
-            courier:server_msg(UserRequesting, User ++ ?FRIEND_REQUEST_REJECTED);
+            courier:server_msg(UserRequesting, User ++ ?FRIEND_REQUEST_REJECTED),
+            gen_server:cast(GenServerPid, {message, Id ++ "," ++ ?FRIENDSHIP_STATUS_SENT});
         {remove_friend, Id, Friend} ->
             logger:debug("socket_handler:handle_packet() Got action remove_friend ~p", [Friend]),
-            roster:remove_friend(User, Friend);
+            roster:remove_friend(User, Friend),
+            gen_server:cast(GenServerPid, {message, Id ++ "," ++ ?FRIENDSHIP_STATUS_SENT});
         _Other ->
             do_nothing
     end.

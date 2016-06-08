@@ -15,7 +15,7 @@
     is_valid/1,
     disconnected/0,
     group_message/3,
-    chat/3,
+    chat/4,
     server_msg/2
 ]).
 
@@ -32,6 +32,8 @@
 -define(MESSAGE_SENT, "message_sent").
 -define(GROUP_MESSAGE_SENT, "group_message_sent").
 -define(NO_FRIENDS, "no_friends").
+-define(FRIEND_UNAVAILABLE, "friend_unavailable").
+-define(NOT_FRIENDS, "not_friends").
 
 %% The state of this gen_server is relevant only for the connected users.
 %% Registered users that are offline can be fetch from the registration gen_server.
@@ -57,8 +59,8 @@ disconnected() ->
 group_message(MsgId, From, Msg) ->
     gen_server:cast(courier, {group_msg, MsgId, From, lists:flatten(Msg)}).
 
-chat(FromUser, ToUser, Msg) ->
-    gen_server:cast(courier, {chat, FromUser, ToUser, lists:flatten(Msg)}).
+chat(MsgId, FromUser, ToUser, Msg) ->
+    gen_server:cast(courier, {chat, MsgId, FromUser, ToUser, lists:flatten(Msg)}).
 
 %% Sends a message from the server.
 server_msg(ToUser, Msg) ->
@@ -151,29 +153,33 @@ handle_cast({group_msg, MsgId, FromUser, Msg}, State) ->
     end,
     {noreply, State};
 
-handle_cast({chat, FromUser, ToUser, Msg}, State) ->
+handle_cast({chat, MsgId, FromUser, ToUser, Msg}, State) ->
     logger:debug("courier:handle_cast() chat New message ~p to ~p", [Msg, ToUser]),
+    NameToPidDict = State#state.name_to_pid,
+    [FromUserPid] = dict:fetch(FromUser, NameToPidDict),
     case roster:are_friends(FromUser, ToUser) of
         true ->
             logger:debug(
                 "courier:handle_cast() chat Users ~p and ~p are friends.", [FromUser, ToUser]),
                 %% We need the pid of ToUser.
-                NameToPidDict = State#state.name_to_pid,
+
                 case dict:is_key(ToUser, NameToPidDict) of
                     true ->
                         [ToPid] = dict:fetch(ToUser, NameToPidDict),
                         logger:debug("courier:handle_cast() chat Found PID ~p for user ~p.",
                             [ToPid, ToUser]),
-                        socket_handler:send_msg_to_pid(Msg, ToPid);
+                        socket_handler:send_msg_to_pid(Msg, ToPid),
+                        socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?MESSAGE_SENT, FromUserPid);
                     false ->
                         logger:debug("courier:handle_cast() chat Could not send message ~p to user"
-                            ++ "~p because (s)he is not regitered on this chat.", [Msg, ToUser])
-                         %% TODO send message to FromUser that the message was not delivered.
+                            ++ "~p because (s)he is not regitered on this chat.", [Msg, ToUser]),
+                        socket_handler:send_msg_to_pid(
+                            MsgId ++ "," ++ ?FRIEND_UNAVAILABLE, FromUserPid)
                  end;
          false ->
              logger:debug("courier:handle_cast() chat Could not send message to ~p because (s)he is"
-                " not a friend of ~p.", [ToUser, FromUser])
-            %% TODO send message to FromUser that the message was not delivered.
+                " not a friend of ~p.", [ToUser, FromUser]),
+             socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?NOT_FRIENDS, FromUserPid)
     end,
     {noreply, State};
 
