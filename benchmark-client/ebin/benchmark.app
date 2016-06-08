@@ -19,6 +19,6 @@
                     chat_client_sup,
                     generator
                 ]},
-	{applications, [kernel, stdlib]},
+	{applications, [kernel, stdlib, p1_mysql]},
 	{mod, {benchmark_app, []}}
 	]}.
