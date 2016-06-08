@@ -46,6 +46,7 @@ get_unique_name(UsedNamesSet) ->
 %%% gen_server callbacks
 %%%=================================================================================================
 init(_Args) ->
+    random:seed(erlang:now()),
     {ok, #state{id = 1, names = sets:new()}}.
 
 handle_call(get_id, _From, State) ->
