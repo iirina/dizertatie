@@ -68,28 +68,37 @@ read(Socket, Name, Pid) ->
             logger:debug("socket_handler:loop() Reading for PID ~p, message ~p",
                 [Pid, Packet]),
             %% Pid corresponds to the gen_server that handles Socket.
-            case Name of
-                undefined ->
-                    %% In this case, the Name is undefined, so auth is mandatory.
-                    logger:debug(
-                        "socket_handler:read() undefined name: Packet ~p, Pid ~p", [Packet, Pid]),
-                    case chat_auth:handle_auth_packet(Packet, Pid) of
-                        {user, User} ->
-                            read(Socket, User, Pid);
-                        _Other ->
-                            read(Socket, undefined, Pid)
-                    end;
-                _Other ->
-                    %% Here, the user is authenticated as Name.
-                    handle_packet(Packet, Name, Pid),
-                    read(Socket, Name, Pid)
-            end;
+            StringPacket = chat_utils:trim_string(erlang:binary_to_list(Packet)),
+            Requests = string:tokens(StringPacket, "\n"),
+            NewName = handle_request(Requests, Name, Pid),
+            read(Socket, NewName, Pid);
         {error, closed} ->
             logger:debug(
                 "socket_handler:loop() Stopped reading for user ~p in PID ~p. Socket closed.",
                     [Name, Pid]),
             unlink(Pid),
             gen_server:cast(Pid, socket_closed)
+    end.
+
+handle_request([], Name, _Pid) ->
+    Name;
+
+handle_request([Request | Requests], Name, Pid) ->
+    case Name of
+        undefined ->
+            %% In this case, the Name is undefined, so auth is mandatory.
+            logger:debug(
+                "socket_handler:read() undefined name: Packet ~p, Pid ~p", [Request, Pid]),
+            case chat_auth:handle_auth_packet(Request, Pid) of
+                {user, User} ->
+                    handle_request(Requests, User, Pid);
+                _Other ->
+                    handle_request(Requests, undefined, Pid)
+            end;
+        _Other ->
+            %% Here, the user is authenticated as Name.
+            handle_packet(Request, Name, Pid),
+            handle_request(Requests, Name, Pid)
     end.
 
 %% User1: trimite la server add_friend,User2
@@ -138,8 +147,7 @@ handle_packet(Packet, User, GenServerPid) ->
             do_nothing
     end.
 
-get_action_type(Packet) ->
-    Request = chat_utils:trim_string(erlang:binary_to_list(Packet)),
+get_action_type(Request) ->
     logger:debug("socket_handler:get_action_type() Request ~p", [Request]),
     Tokens = string:tokens(Request, ","),
     logger:debug("socket_handler:get_action_type() Tokens ~p", [Tokens]),

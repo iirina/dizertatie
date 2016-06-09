@@ -19,9 +19,8 @@
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-handle_auth_packet(Packet, GenServerPid) ->
-    logger:debug("chat_auth:handle_auth_packet(~p, ~p)", [Packet, GenServerPid]),
-    Request = erlang:binary_to_list(Packet),
+handle_auth_packet(Request, GenServerPid) ->
+    logger:debug("chat_auth:handle_auth_packet(~p, ~p)", [Request, GenServerPid]),
     case get_type_of_action(Request) of
         {auth, Id, User} ->
             case registration:is_registered(User) of
