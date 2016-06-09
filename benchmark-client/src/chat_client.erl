@@ -28,7 +28,7 @@
 -define(INSERT_BENCHMARK_INTO_MYSQL, "insert into benchmark values ").
 
 %% Time expressed in ms.
--define(TIME_TO_DROP_BENCHMARK, 10 * 1000).
+-define(TIME_TO_DROP_BENCHMARK, 5 * 1000).
 
 -record(state, {username, password, socket, bmList}).
 
@@ -62,21 +62,43 @@ send_tcp_msg(Socket, Id, Msg) ->
     end.
 
 get_id(Packet) ->
-    Message = chat_utils:trim_string(erlang:binary_to_list(Packet)),
+    Message = chat_utils:trim_string(Packet),
     Tokens = string:tokens(Message, ","),
-    lists:nth(1, Tokens).
+    StringId = lists:nth(1, Tokens),
+    case string:to_integer(StringId) of
+        {error, _Reason} ->
+            false;
+        {_IntId, []} ->
+            %% the correct one
+            StringId;
+        _Other ->
+            false
+    end.
+
+
+handle_requests(Requests, Timestamp, ClientPid) ->
+    lists:foreach(
+        fun(Request) ->
+            case get_id(Request) of
+                false ->
+                    ok;
+                MsgId ->
+                    logger:debug("chat_client:handle_requests ~p", [Request]),
+                    gen_server:cast(ClientPid, {add_bm_msg, [{MsgId, "recv", Timestamp, Request}]})
+            end
+        end,
+        Requests
+    ).
 
 read(Socket, ClientPid) ->
         logger:debug("chat_client:read() Ready to read."),
         case gen_tcp:recv(Socket, 0) of
             {ok, Packet} ->
-                logger:debug("chat_client:read() Reading for PID ~p, message ~p",
-                    [ClientPid, binary_to_list(Packet)]),
                 Now = now(),
-                MsgId = get_id(Packet),
-                Msg = chat_utils:trim_string(binary_to_list(Packet)),
-                gen_server:cast(
-                    ClientPid, {add_bm_msg, [{MsgId, "recv", Now, Msg}]});
+                StringPacket = chat_utils:trim_string(binary_to_list(Packet)),
+                Requests = string:tokens(StringPacket, "\n"),
+                handle_requests(Requests, Now, ClientPid),
+                read(Socket, ClientPid);
             {error, closed} ->
                 logger:info("chat_client:loop() Stopped reading for in PID ~p. Socket closed.",
                     [ClientPid]),
@@ -238,7 +260,6 @@ handle_info(drop_benchmark, State) ->
     Now = now(),
     Empty = {"", []},
     {StringBm, BmListBefore} = get_elements_before(BmList, Empty, Now),
-    logger:debug("chat_client:handle_info() BmListBefore ~p", [BmListBefore]),
     case BmListBefore of
         [] ->
             {noreply, State};
@@ -252,8 +273,8 @@ handle_info(drop_benchmark, State) ->
             ),
             MySqlInsertCommand = ?INSERT_BENCHMARK_INTO_MYSQL ++ StringBm,
             _Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand),
-            logger:debug("chat_client:handle_info() drop_benchmark Command ~p",
-                [MySqlInsertCommand]),
+            % logger:debug("chat_client:handle_info() drop_benchmark Command ~p",
+            %     [MySqlInsertCommand]),
             {noreply, State#state{bmList = NewList}}
     end;
 

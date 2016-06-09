@@ -71,9 +71,7 @@ get_random_msg(MessageLength) ->
     Chrs = list_to_tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"),
     ChrsSize = size(Chrs),
     F = fun(_, R) -> [element(random:uniform(ChrsSize), Chrs) | R] end,
-    Msg = lists:foldl(F, "", lists:seq(1, MessageLength)),
-    logger:debug("bm_generator:get_random_msg(~p) ~p", [MessageLength, Msg]),
-    Msg.
+    lists:foldl(F, "", lists:seq(1, MessageLength)).
 
 get_random_messages(0, Messages) ->
     Messages;
