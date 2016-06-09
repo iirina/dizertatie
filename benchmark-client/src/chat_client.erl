@@ -147,7 +147,7 @@ handle_cast(register, State) ->
     Socket = State#state.socket,
     BmList = State#state.bmList,
     Id = generator:get_id(),
-    SocketMsg = Id ++ ",register," ++ Username ++ "," ++ Password,
+    SocketMsg = Id ++ ",register," ++ Username ++ "," ++ Password ++ "\n",
     RequestTime = now(),
     logger:info("chat_client:handle_cast() register ~p RequestTime ~p", [Username, RequestTime]),
     case gen_tcp:send(Socket, SocketMsg) of
@@ -166,7 +166,7 @@ handle_cast(auth, State) ->
     Socket = State#state.socket,
     BmList = State#state.bmList,
     Id = generator:get_id(),
-    SocketMsg = Id ++ ",auth," ++ Username ++ "," ++ Password,
+    SocketMsg = Id ++ ",auth," ++ Username ++ "," ++ Password ++ "\n",
     logger:info("chat_client:handle_call() auth ~p", [Username]),
     case send_tcp_msg(Socket, SocketMsg) of
         [] ->
@@ -180,7 +180,7 @@ handle_cast({chat, Msg, ToUsername}, State) ->
     BmList = State#state.bmList,
     Socket = State#state.socket,
     Id = generator:get_id(),
-    SocketMsg = Id ++ ",chat," ++ ToUsername ++ "," ++ Msg,
+    SocketMsg = Id ++ ",chat," ++ ToUsername ++ "," ++ Msg ++ "\n",
     logger:info("chat_client:handle_cast() chat ~p from ~p to ~p.", [Msg, Username, ToUsername]),
     case send_tcp_msg(Socket, SocketMsg) of
         [] ->
@@ -194,8 +194,22 @@ handle_cast({group, Msg}, State) ->
     BmList = State#state.bmList,
     Socket = State#state.socket,
     Id = generator:get_id(),
-    SocketMsg = Id ++ ",group," ++ Msg,
+    SocketMsg = Id ++ ",group," ++ Msg ++ "\n",
     logger:info("chat_client:handle_cast() group ~p from ~p.", [Msg, Username]),
+    case send_tcp_msg(Socket, SocketMsg) of
+        [] ->
+            {noreply, State};
+        List ->
+            {noreply, State#state{bmList = lists:append(BmList, List)}}
+    end;
+
+handle_cast({accept_friend_request, Friend}, State) ->
+    Username = State#state.username,
+    BmList = State#state.bmList,
+    Socket = State#state.socket,
+    Id = generator:get_id(),
+    SocketMsg = Id ++ ",accept_friend_request," ++ Friend ++ "\n",
+    logger:info("chat_client:handle_cast() accept_friend_request ~p for ~p.", [Friend, Username]),
     case send_tcp_msg(Socket, SocketMsg) of
         [] ->
             {noreply, State};

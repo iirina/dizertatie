@@ -26,7 +26,13 @@
 -define(MYSQL_PASSWORD, "parola").
 -define(MYSQL_DATABASE, "chat").
 
--record(state, {nr_clients, pids = []}).
+-define(NR_USERS, 5).
+-define(NR_FRIENDSHIP, 5).
+-define(NR_MESSAGES, 100).
+-define(NR_GROUP_MESSAGES, 5).
+-define(BATCH_SIZE, 2).
+
+-record(state, {pids = [], usernames = []}).
 
 %%%=================================================================================================
 %%% API
@@ -52,32 +58,38 @@ get_usernames(NrUsers, Usernames) ->
     NewUsernamesList = lists:append(Usernames, [Name]),
     get_usernames(NrUsers - 1, NewUsernamesList).
 
+get_random_friendships(0, Friendships) ->
+    Friendships;
+
+get_random_friendships(NrFrienships, ExistingFriendships) ->
+    Friendship = {random:uniform(?NR_USERS), random:uniform(?NR_USERS)},
+    UpdatedFrienships = lists:append([Friendship], ExistingFriendships),
+    get_random_friendships(NrFrienships - 1, UpdatedFrienships).
 
 %%%=================================================================================================
 %%% gen_server callbacks
 %%%=================================================================================================
-init([NrClients]) ->
-    logger:debug("bm_generator:init(~p)", [NrClients]),
-    Usernames = get_usernames(NrClients, []),
-    logger:debug("bm_generator:init(~p) Username List ~p", [NrClients, Usernames]),
+init(_Args) ->
+    logger:debug("bm_generator:init()"),
+    Usernames = get_usernames(?NR_USERS, []),
+    logger:debug("bm_generator:init() Username List ~p", [Usernames]),
     lists:foreach(
         fun(Username) ->
             chat_client:start(Username, "parola" ++ Username)
         end,
         Usernames
     ),
-    {ok, #state{nr_clients = NrClients, pids = []}}.
+    {ok, #state{pids = [], usernames = Usernames}}.
 
 handle_call(OtherRequest, _From, State) ->
     logger:error("bm_generator:handle_cast() Unknown cast request <<~p>>", [OtherRequest]),
     {noreply, State}.
 
 handle_cast({add_pid, Pid}, State) ->
-    NrClients =  State#state.nr_clients,
     PidList = State#state.pids,
     NewPidList = lists:append(PidList, [Pid]),
     logger:debug("bm_generator:handle_cast() add_pid ~p to list ~p.", [Pid, PidList]),
-    case  length(NewPidList) == NrClients of
+    case  length(NewPidList) == ?NR_USERS of
         true ->
             gen_server:cast(bm_generator, register_users);
         false ->
@@ -88,14 +100,36 @@ handle_cast({add_pid, Pid}, State) ->
 handle_cast(register_users, State) ->
     PidList = State#state.pids,
     logger:debug("bm_generator:handle_cast() register_users ~p.", [PidList]),
+    % This is seq
     lists:foreach(
         fun(Pid) ->
             Pid ! register
         end,
         PidList
     ),
-    % gen_server:cast(bm_generator, send_)
-    {noreply, State}.
+    gen_server:cast(bm_generator, add_friends_to_mysql),
+    {noreply, State};
+
+handle_cast(add_friends_to_mysql, State) ->
+    Pids = State#state.pids,
+    Usernames = State#state.usernames,
+    %% Add ?NR_FRIENDSHIP pairs (u1, u2) to mysql
+    random:seed(erlang:now()),
+    Friends = get_random_friendships(?NR_FRIENDSHIP, []),
+
+    %% This is seq
+    lists:foreach(
+        fun({PidIndex, UserIndex}) ->
+            Pid = lists:nth(PidIndex, Pids),
+            User = lists:nth(UserIndex, Usernames),
+            Pid ! {accept_friend_request, User}
+        end,
+        Friends
+    ),
+    {noreply, State};
+
+handle_cast(Other, _State) ->
+    logger:error("bm_generator:handle_cast() Unknown request ~p", [Other]).
 
 handle_info(Info, State) ->
     gen_server:cast(self(), Info),
