@@ -57,9 +57,25 @@ handle_auth_packet(Request, GenServerPid) ->
                     gen_server:cast(GenServerPid, {message, Id ++ "," ++ Message}),
                     registration_faild
             end;
+        {id, Id} ->
+            gen_server:cast(GenServerPid, {message, Id ++ "," ++ ?BAD_REQUEST});
         _Other ->
             gen_server:cast(GenServerPid, {message, ?BAD_REQUEST})
     end.
+
+get_id(StringRequest) ->
+    Tokens = string:tokens(StringRequest, ","),
+    StringId = lists:nth(1, Tokens),
+    case string:to_integer(StringId) of
+        {error, _Reason} ->
+            false;
+        {_IntId, []} ->
+            %% the correct one
+            {id, StringId};
+        _Other ->
+            false
+    end.
+
 
 get_type_of_action(StringRequest) ->
     logger:debug("chat_auth:get_type_of_action(~p)", [StringRequest]),
@@ -72,8 +88,9 @@ get_type_of_action(StringRequest) ->
                 {user, Id, User, Password} ->
                     {register, Id, User, Password};
                 false ->
-                    logger:debug("chat_auth:get_type_of_action(~p) unrecognized.", [Request]),
-                    unknown
+                    get_id(Request)
+                    % logger:debug("chat_auth:get_type_of_action(~p) unrecognized.", [Request]),
+                    % unknown
             end
     end.
 

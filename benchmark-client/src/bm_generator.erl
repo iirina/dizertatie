@@ -8,6 +8,10 @@
     add_pid/1
 ]).
 
+-export([
+    send_msg_to_pid/2
+]).
+
 %% gen_server callbacks
 -export([
     init/1,
@@ -26,10 +30,10 @@
 -define(MYSQL_PASSWORD, "parola").
 -define(MYSQL_DATABASE, "chat").
 
--define(NR_USERS, 5).
--define(NR_FRIENDSHIP, 5).
--define(NR_MESSAGES, 5).
--define(NR_GROUP_MESSAGES, 5).
+-define(NR_USERS, 100).
+-define(NR_FRIENDSHIP, 100).
+-define(NR_MESSAGES, 100).
+-define(NR_GROUP_MESSAGES, 100).
 -define(BATCH_SIZE, 2).
 -define(MAX_MESSAGE_LENGTH, 10).
 
@@ -93,6 +97,9 @@ get_random_group_messages(NrMessages, ExistingMessages) ->
     NewObject = {random:uniform(?NR_USERS), get_random_msg(MessageLength)},
     get_random_group_messages(NrMessages - 1, lists:append(ExistingMessages, [NewObject])).
 
+send_msg_to_pid(Pid, Msg) ->
+        Pid ! Msg.
+
 %%%=================================================================================================
 %%% gen_server callbacks
 %%%=================================================================================================
@@ -127,14 +134,16 @@ handle_cast({add_pid, Pid}, State) ->
 handle_cast(register_users, State) ->
     PidList = State#state.pids,
     % logger:debug("bm_generator:handle_cast() register_users ~p.", [PidList]),
-    % This is seq
+    % This is conc
     lists:foreach(
         fun(Pid) ->
-            Pid ! register
+            spawn(bm_generator, send_msg_to_pid, [Pid, register])
         end,
         PidList
     ),
-    gen_server:cast(bm_generator, make_friends),
+    % apply_after(Time, Module, Function, Arguments)
+    timer:apply_after(7000, gen_server, cast, [bm_generator, make_friends]),
+    % gen_server:cast(bm_generator, make_friends),
     {noreply, State};
 
 handle_cast(make_friends, State) ->
@@ -149,7 +158,7 @@ handle_cast(make_friends, State) ->
         fun({PidIndex, UserIndex}) ->
             Pid = lists:nth(PidIndex, Pids),
             User = lists:nth(UserIndex, Usernames),
-            Pid ! {accept_friend_request, User}
+            spawn(bm_generator, send_msg_to_pid, [Pid, {accept_friend_request, User}])
         end,
         Friends
     ),
@@ -168,7 +177,7 @@ handle_cast(send_messages, State) ->
         fun({PidIndex, UserIndex, Message}) ->
             Pid = lists:nth(PidIndex, Pids),
             From = lists:nth(UserIndex, Usernames),
-            Pid ! {chat, Message, From}
+            spawn(bm_generator, send_msg_to_pid, [Pid, {chat, Message, From}])
         end,
         Messages
     ),
@@ -186,7 +195,7 @@ handle_cast(send_group_messages, State) ->
     lists:foreach(
         fun({PidIndex, Message}) ->
             Pid = lists:nth(PidIndex, Pids),
-            Pid ! {group, Message}
+            spawn(bm_generator, send_msg_to_pid, [Pid, {group, Message}])
         end,
         Messages
     ),
