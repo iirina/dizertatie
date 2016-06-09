@@ -28,9 +28,10 @@
 
 -define(NR_USERS, 5).
 -define(NR_FRIENDSHIP, 5).
--define(NR_MESSAGES, 100).
+-define(NR_MESSAGES, 5).
 -define(NR_GROUP_MESSAGES, 5).
 -define(BATCH_SIZE, 2).
+-define(MAX_MESSAGE_LENGTH, 10).
 
 -record(state, {pids = [], usernames = []}).
 
@@ -66,13 +67,41 @@ get_random_friendships(NrFrienships, ExistingFriendships) ->
     UpdatedFrienships = lists:append([Friendship], ExistingFriendships),
     get_random_friendships(NrFrienships - 1, UpdatedFrienships).
 
+get_random_msg(MessageLength) ->
+    Chrs = list_to_tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"),
+    ChrsSize = size(Chrs),
+    F = fun(_, R) -> [element(random:uniform(ChrsSize), Chrs) | R] end,
+    Msg = lists:foldl(F, "", lists:seq(1, MessageLength)),
+    logger:debug("bm_generator:get_random_msg(~p) ~p", [MessageLength, Msg]),
+    Msg.
+
+get_random_messages(0, Messages) ->
+    Messages;
+
+get_random_messages(NrMessages, ExistingMessages) ->
+    MessageLength = random:uniform(?MAX_MESSAGE_LENGTH),
+    NewObject = {
+        random:uniform(?NR_USERS),
+        random:uniform(?NR_USERS),
+        get_random_msg(MessageLength)
+    },
+    get_random_messages(NrMessages - 1, lists:append(ExistingMessages, [NewObject])).
+
+get_random_group_messages(0, Messages) ->
+    Messages;
+
+get_random_group_messages(NrMessages, ExistingMessages) ->
+    MessageLength = random:uniform(?MAX_MESSAGE_LENGTH),
+    NewObject = {random:uniform(?NR_USERS), get_random_msg(MessageLength)},
+    get_random_group_messages(NrMessages - 1, lists:append(ExistingMessages, [NewObject])).
+
 %%%=================================================================================================
 %%% gen_server callbacks
 %%%=================================================================================================
 init(_Args) ->
     logger:debug("bm_generator:init()"),
     Usernames = get_usernames(?NR_USERS, []),
-    logger:debug("bm_generator:init() Username List ~p", [Usernames]),
+    % logger:debug("bm_generator:init() Username List ~p", [Usernames]),
     lists:foreach(
         fun(Username) ->
             chat_client:start(Username, "parola" ++ Username)
@@ -88,7 +117,7 @@ handle_call(OtherRequest, _From, State) ->
 handle_cast({add_pid, Pid}, State) ->
     PidList = State#state.pids,
     NewPidList = lists:append(PidList, [Pid]),
-    logger:debug("bm_generator:handle_cast() add_pid ~p to list ~p.", [Pid, PidList]),
+    % logger:debug("bm_generator:handle_cast() add_pid ~p to list ~p.", [Pid, PidList]),
     case  length(NewPidList) == ?NR_USERS of
         true ->
             gen_server:cast(bm_generator, register_users);
@@ -99,7 +128,7 @@ handle_cast({add_pid, Pid}, State) ->
 
 handle_cast(register_users, State) ->
     PidList = State#state.pids,
-    logger:debug("bm_generator:handle_cast() register_users ~p.", [PidList]),
+    % logger:debug("bm_generator:handle_cast() register_users ~p.", [PidList]),
     % This is seq
     lists:foreach(
         fun(Pid) ->
@@ -107,10 +136,10 @@ handle_cast(register_users, State) ->
         end,
         PidList
     ),
-    gen_server:cast(bm_generator, add_friends_to_mysql),
+    gen_server:cast(bm_generator, make_friends),
     {noreply, State};
 
-handle_cast(add_friends_to_mysql, State) ->
+handle_cast(make_friends, State) ->
     Pids = State#state.pids,
     Usernames = State#state.usernames,
     %% Add ?NR_FRIENDSHIP pairs (u1, u2) to mysql
@@ -126,6 +155,44 @@ handle_cast(add_friends_to_mysql, State) ->
         end,
         Friends
     ),
+    gen_server:cast(bm_generator, send_messages),
+    {noreply, State};
+
+handle_cast(send_messages, State) ->
+    Pids = State#state.pids,
+    Usernames = State#state.usernames,
+    %% Add ?NR_FRIENDSHIP pairs (u1, u2) to mysql
+    random:seed(erlang:now()),
+    Messages = get_random_messages(?NR_MESSAGES, []),
+
+    %% This is seq
+    lists:foreach(
+        fun({PidIndex, UserIndex, Message}) ->
+            Pid = lists:nth(PidIndex, Pids),
+            From = lists:nth(UserIndex, Usernames),
+            Pid ! {chat, Message, From}
+        end,
+        Messages
+    ),
+    gen_server:cast(bm_generator, send_group_messages),
+    {noreply, State};
+
+handle_cast(send_group_messages, State) ->
+    Pids = State#state.pids,
+    %% Add ?NR_FRIENDSHIP pairs (u1, u2) to mysql
+    random:seed(erlang:now()),
+    Messages = get_random_group_messages(?NR_GROUP_MESSAGES, []),
+    % logger:debug("bm_generator:handle_cast() send_group_messages ~p", [Messages]),
+
+    %% This is seq
+    lists:foreach(
+        fun({PidIndex, Message}) ->
+            Pid = lists:nth(PidIndex, Pids),
+            Pid ! {group, Message}
+        end,
+        Messages
+    ),
+    % gen_server:cast(bm_generator, send_group_messages),
     {noreply, State};
 
 handle_cast(Other, _State) ->

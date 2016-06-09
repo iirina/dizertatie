@@ -52,9 +52,9 @@ fetch_users_from_mysql() ->
     case p1_mysql:fetch(?MYSQL_ID, ?FETCH_ALL_USERS_MYSQL) of
         {data, {p1_mysql_result, _FieldList, UsersRetrieved, _Number, _List}} ->
             Users = lists:map(
-                fun([User, Pass]) ->
-                    logger:debug(
-                        "registration:fetch_users_from_mysql() User ~p password ~p", [User, Pass]),
+                fun([User, _Pass]) ->
+                    % logger:debug(
+                    %     "generator:fetch_users_from_mysql() User ~p password ~p", [User, Pass]),
                     User
                 end,
                 UsersRetrieved
@@ -74,13 +74,11 @@ init(_Args) ->
 
 handle_call(get_id, _From, State) ->
     Id = State#state.id,
-    logger:debug("generator:handle_call() get_id ~p", [Id]),
     {reply, integer_to_list(Id), State#state{id = Id + 1}};
 
 handle_call(get_name, _From, State) ->
     Names = State#state.names,
     Name = get_unique_name(Names),
-    logger:debug("generator:handle_call() get_name ~p", [Name]),
     {reply, Name, State#state{names = sets:add_element(Name, Names)} };
 
 handle_call(Request, From, State) ->

@@ -49,16 +49,15 @@ start_link(Args) ->
 %%%=================================================================================================
 %%% Helper functions
 %%%=================================================================================================
-send_tcp_msg(Socket, Msg) ->
+send_tcp_msg(Socket, Id, Msg) ->
     RequestTime = now(),
-    Id = generator:get_id(),
     case gen_tcp:send(Socket, Msg) of
         ok ->
-            logger:debug("chat_client:send_tcp_msg() message ~p sent at ~p.", [Msg, RequestTime]),
-            [{Id, "sent", RequestTime}];
-        {error, Error} ->
-            logger:debug(
-                "chat_client:handle_call() auth message not sent due to ~p", [Error]),
+            % logger:debug("chat_client:send_tcp_msg() message ~p sent at ~p.", [Msg, RequestTime]),
+            [{Id, "sent", RequestTime, chat_utils:trim_string(Msg)}];
+        {error, _Error} ->
+            % logger:debug(
+            %     "chat_client:handle_call() auth message not sent due to ~p", [Error]),
             []
     end.
 
@@ -72,12 +71,14 @@ read(Socket, ClientPid) ->
         case gen_tcp:recv(Socket, 0) of
             {ok, Packet} ->
                 logger:debug("chat_client:read() Reading for PID ~p, message ~p",
-                    [ClientPid, Packet]),
+                    [ClientPid, binary_to_list(Packet)]),
                 Now = now(),
                 MsgId = get_id(Packet),
-                gen_server:cast(ClientPid, {add_bm_msg, [{MsgId, "recv", Now}]});
+                Msg = chat_utils:trim_string(binary_to_list(Packet)),
+                gen_server:cast(
+                    ClientPid, {add_bm_msg, [{MsgId, "recv", Now, Msg}]});
             {error, closed} ->
-                logger:debug("chat_client:loop() Stopped reading for in PID ~p. Socket closed.",
+                logger:info("chat_client:loop() Stopped reading for in PID ~p. Socket closed.",
                     [ClientPid]),
                 unlink(ClientPid),
                 gen_server:cast(ClientPid, socket_closed)
@@ -106,12 +107,12 @@ maybe_add_comma(CurrString) ->
 get_elements_before([], Result, _Timestamp) ->
     Result;
 
-get_elements_before([{Id, Type, CurrTimestamp} | RestOfList], {CurrString, CurrList}, Timestamp) ->
+get_elements_before([{Id, Type, CurrTimestamp, Msg} | RestOfList], {CurrString, CurrList}, Timestamp) ->
     case CurrTimestamp < Timestamp of
         true ->
             NewString = maybe_add_comma(CurrString) ++ " (\"" ++ Id ++ "\", \"" ++
-                Type ++ "\", \"" ++ get_string_timestamp(CurrTimestamp) ++ "\")",
-            NewList = lists:append(CurrList, [{Id, Type, CurrTimestamp}]),
+                Type ++ "\", \"" ++ get_string_timestamp(CurrTimestamp) ++ "\", \"" ++ Msg ++ "\")",
+            NewList = lists:append(CurrList, [{Id, Type, CurrTimestamp, Msg}]),
             get_elements_before(RestOfList, {NewString, NewList}, Timestamp);
         false ->
             ok
@@ -149,13 +150,14 @@ handle_cast(register, State) ->
     Id = generator:get_id(),
     SocketMsg = Id ++ ",register," ++ Username ++ "," ++ Password ++ "\n",
     RequestTime = now(),
-    logger:info("chat_client:handle_cast() register ~p RequestTime ~p", [Username, RequestTime]),
+    % logger:info("chat_client:handle_cast() register ~p RequestTime ~p", [Username, RequestTime]),
     case gen_tcp:send(Socket, SocketMsg) of
         ok ->
-            logger:debug("chat_client:handle_cast() register message sent."),
-            {noreply, State#state{bmList = lists:append(BmList, [{Id, "sent", RequestTime}])}};
+            % logger:debug("chat_client:handle_cast() register message sent."),
+            Msg = chat_utils:trim_string(SocketMsg),
+            {noreply, State#state{bmList = lists:append(BmList, [{Id, "sent", RequestTime, Msg}])}};
         {error, Error} ->
-            logger:debug(
+            logger:error(
                 "chat_client:handle_cast() register message not sent due to ~p", [Error])
     end;
 
@@ -168,7 +170,7 @@ handle_cast(auth, State) ->
     Id = generator:get_id(),
     SocketMsg = Id ++ ",auth," ++ Username ++ "," ++ Password ++ "\n",
     logger:info("chat_client:handle_call() auth ~p", [Username]),
-    case send_tcp_msg(Socket, SocketMsg) of
+    case send_tcp_msg(Socket, Id, SocketMsg) of
         [] ->
             {noreply, State};
         List ->
@@ -181,8 +183,8 @@ handle_cast({chat, Msg, ToUsername}, State) ->
     Socket = State#state.socket,
     Id = generator:get_id(),
     SocketMsg = Id ++ ",chat," ++ ToUsername ++ "," ++ Msg ++ "\n",
-    logger:info("chat_client:handle_cast() chat ~p from ~p to ~p.", [Msg, Username, ToUsername]),
-    case send_tcp_msg(Socket, SocketMsg) of
+    logger:info("chat_client:handle_cast() chat from ~p to ~p.", [Username, ToUsername]),
+    case send_tcp_msg(Socket, Id, SocketMsg) of
         [] ->
             {noreply, State};
         List ->
@@ -195,8 +197,8 @@ handle_cast({group, Msg}, State) ->
     Socket = State#state.socket,
     Id = generator:get_id(),
     SocketMsg = Id ++ ",group," ++ Msg ++ "\n",
-    logger:info("chat_client:handle_cast() group ~p from ~p.", [Msg, Username]),
-    case send_tcp_msg(Socket, SocketMsg) of
+    logger:info("chat_client:handle_cast() group from ~p.", [Username]),
+    case send_tcp_msg(Socket, Id, SocketMsg) of
         [] ->
             {noreply, State};
         List ->
@@ -210,7 +212,7 @@ handle_cast({accept_friend_request, Friend}, State) ->
     Id = generator:get_id(),
     SocketMsg = Id ++ ",accept_friend_request," ++ Friend ++ "\n",
     logger:info("chat_client:handle_cast() accept_friend_request ~p for ~p.", [Friend, Username]),
-    case send_tcp_msg(Socket, SocketMsg) of
+    case send_tcp_msg(Socket, Id, SocketMsg) of
         [] ->
             {noreply, State};
         List ->
@@ -218,7 +220,7 @@ handle_cast({accept_friend_request, Friend}, State) ->
     end;
 
 handle_cast({add_bm_msg, List}, State) ->
-    logger:info("chat_client:handle_cast() add_bm_msg ~p.", [List]),
+    % logger:info("chat_client:handle_cast() add_bm_msg ~p.", [List]),
     case List of
         [] ->
             {noreply, State};
@@ -236,6 +238,7 @@ handle_info(drop_benchmark, State) ->
     Now = now(),
     Empty = {"", []},
     {StringBm, BmListBefore} = get_elements_before(BmList, Empty, Now),
+    logger:debug("chat_client:handle_info() BmListBefore ~p", [BmListBefore]),
     case BmListBefore of
         [] ->
             {noreply, State};
@@ -248,9 +251,9 @@ handle_info(drop_benchmark, State) ->
                 BmListBefore
             ),
             MySqlInsertCommand = ?INSERT_BENCHMARK_INTO_MYSQL ++ StringBm,
-            Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand),
-            logger:debug(
-                "chat_client:handle_info() drop_benchmark MySql result: ~p", [Result]),
+            _Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand),
+            logger:debug("chat_client:handle_info() drop_benchmark Command ~p",
+                [MySqlInsertCommand]),
             {noreply, State#state{bmList = NewList}}
     end;
 

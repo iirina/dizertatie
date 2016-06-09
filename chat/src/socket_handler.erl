@@ -65,8 +65,6 @@ read(Socket, Name, Pid) ->
     logger:debug("socket_handler:read() Ready to read."),
     case gen_tcp:recv(Socket, 0) of
         {ok, Packet} ->
-            logger:debug("socket_handler:loop() Reading for PID ~p, message ~p",
-                [Pid, Packet]),
             %% Pid corresponds to the gen_server that handles Socket.
             StringPacket = chat_utils:trim_string(erlang:binary_to_list(Packet)),
             Requests = string:tokens(StringPacket, "\n"),
@@ -148,9 +146,9 @@ handle_packet(Packet, User, GenServerPid) ->
     end.
 
 get_action_type(Request) ->
-    logger:debug("socket_handler:get_action_type() Request ~p", [Request]),
+    % logger:debug("socket_handler:get_action_type() Request ~p", [Request]),
     Tokens = string:tokens(Request, ","),
-    logger:debug("socket_handler:get_action_type() Tokens ~p", [Tokens]),
+    % logger:debug("socket_handler:get_action_type() Tokens ~p", [Tokens]),
     %% TODO verify Tokens has at least 2 element
     Id = lists:nth(1, Tokens),
     Action = lists:nth(2, Tokens),
@@ -158,9 +156,9 @@ get_action_type(Request) ->
         ?GROUP_MESSAGE_TOKEN ->
             %% TODO verify Tokens has 2 elements
             Message = lists:nth(3, Tokens),
-            logger:debug(
-                "socket_handler:get_action_type() Action ~p and message ~p",
-                    [?GROUP_MESSAGE_TOKEN, Message]),
+            % logger:debug(
+            %     "socket_handler:get_action_type() Action ~p and message ~p",
+            %         [?GROUP_MESSAGE_TOKEN, Message]),
             {group_message, Id, Message};
         ?CHAT_TOKEN ->
             %% TODO verify Tokens has 3 elements

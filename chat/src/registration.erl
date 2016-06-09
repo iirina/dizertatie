@@ -117,11 +117,8 @@ get_latest_used_before('$end_of_table', ObjectList, _Timestamp) ->
 get_latest_used_before(Key, ObjectList, Timestamp) ->
     % {User, true, Now}
     KeyObjectList = ets:lookup(?LATEST_REGISTERED_USED_TAB, Key),
-    logger:debug("registration:get_latest_used_before() KeyObjectList ~p", [KeyObjectList]),
     FilteredKeyObjectList = lists:filter(
         fun({_User, _Value, CurrTimestamp}) ->
-            logger:debug("registration:get_latest_used_before() ~p",
-                [CurrTimestamp < Timestamp]),
             CurrTimestamp < Timestamp
         end,
         KeyObjectList
@@ -162,20 +159,20 @@ handle_call({is_registered, User}, _From, State) ->
     Now = now(),
     case ets:lookup(?LATEST_REGISTERED_USED_TAB, User) of
         [] ->
-            logger:debug("registration:handle_call() is_registered User ~p is not in ets table ~p",
-                [User, ?LATEST_REGISTERED_USED_TAB]),
+            % logger:debug("registration:handle_call() is_registered User ~p is not in ets table ~p",
+            %     [User, ?LATEST_REGISTERED_USED_TAB]),
             %% We look for the user in the set that holds all registered users.
             %% TODO: fetch from mysql
             AllRegisteredSets = State#state.all_registered,
             case sets:is_element(User, AllRegisteredSets) of
                 true ->
-                    logger:debug("registration:handle_call() is_registered User ~p is registered.",
-                        [User]),
+                    % logger:debug("registration:handle_call() is_registered User ~p is registered.",
+                    %     [User]),
                     ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
                     {reply, true, State};
                 false ->
-                    logger:debug("registration:handle_call() is_registered User ~p is not "
-                        ++ "registered.", [User]),
+                    % logger:debug("registration:handle_call() is_registered User ~p is not "
+                    %     ++ "registered.", [User]),
                     ets:insert(?LATEST_REGISTERED_USED_TAB, {User, false, Now}),
                     {reply, false, State}
             end;
@@ -239,7 +236,7 @@ handle_info(drop_registered_users, State) ->
             % logger:debug("registration:handle_info() drop_registered_users No entries found.");
             ok;
         {Entries, ObjectList} ->
-            logger:debug("registration:handle_info() drop_registered_users ~p Entries", [Entries]),
+            % logger:debug("registration:handle_info() drop_registered_users ~p Entries", [Entries]),
             lists:foreach(
                 fun(Object) ->
                     ets:delete_object(?LATEST_REGISTERED_ADDED_TAB, Object)

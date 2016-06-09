@@ -154,28 +154,28 @@ handle_cast({group_msg, MsgId, FromUser, Msg}, State) ->
     {noreply, State};
 
 handle_cast({chat, MsgId, FromUser, ToUser, Msg}, State) ->
-    logger:debug("courier:handle_cast() chat New message ~p to ~p", [Msg, ToUser]),
+    logger:debug("courier:handle_cast() chat New message for user ~p", [ToUser]),
     NameToPidDict = State#state.name_to_pid,
     [FromUserPid] = dict:fetch(FromUser, NameToPidDict),
     case roster:are_friends(FromUser, ToUser) of
         true ->
-            logger:debug(
-                "courier:handle_cast() chat Users ~p and ~p are friends.", [FromUser, ToUser]),
-                %% We need the pid of ToUser.
+            % logger:debug(
+                % "courier:handle_cast() chat Users ~p and ~p are friends.", [FromUser, ToUser]),
 
-                case dict:is_key(ToUser, NameToPidDict) of
-                    true ->
-                        [ToPid] = dict:fetch(ToUser, NameToPidDict),
-                        logger:debug("courier:handle_cast() chat Found PID ~p for user ~p.",
-                            [ToPid, ToUser]),
-                        socket_handler:send_msg_to_pid(Msg, ToPid),
-                        socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?MESSAGE_SENT, FromUserPid);
-                    false ->
-                        logger:debug("courier:handle_cast() chat Could not send message ~p to user"
-                            ++ "~p because (s)he is not regitered on this chat.", [Msg, ToUser]),
-                        socket_handler:send_msg_to_pid(
-                            MsgId ++ "," ++ ?FRIEND_UNAVAILABLE, FromUserPid)
-                 end;
+            %% We need the pid of ToUser.
+            case dict:is_key(ToUser, NameToPidDict) of
+                true ->
+                    [ToPid] = dict:fetch(ToUser, NameToPidDict),
+                    logger:debug("courier:handle_cast() chat Found PID ~p for user ~p.",
+                        [ToPid, ToUser]),
+                    socket_handler:send_msg_to_pid(Msg, ToPid),
+                    socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?MESSAGE_SENT, FromUserPid);
+                false ->
+                    logger:debug("courier:handle_cast() chat Could not send message ~p to user"
+                        ++ "~p because (s)he is not regitered on this chat.", [Msg, ToUser]),
+                    socket_handler:send_msg_to_pid(
+                        MsgId ++ "," ++ ?FRIEND_UNAVAILABLE, FromUserPid)
+             end;
          false ->
              logger:debug("courier:handle_cast() chat Could not send message to ~p because (s)he is"
                 " not a friend of ~p.", [ToUser, FromUser]),
@@ -184,7 +184,7 @@ handle_cast({chat, MsgId, FromUser, ToUser, Msg}, State) ->
     {noreply, State};
 
  handle_cast({server_msg, ToUser, Msg}, State) ->
-     logger:debug("courier:handle_cast() server_msg New server message ~p to ~p", [Msg, ToUser]),
+     logger:debug("courier:handle_cast() server_msg New server message to user ~p", [ToUser]),
      NameToPidDict = State#state.name_to_pid,
      case dict:is_key(ToUser, NameToPidDict) of
          true ->
@@ -194,7 +194,7 @@ handle_cast({chat, MsgId, FromUser, ToUser, Msg}, State) ->
              socket_handler:send_msg_to_pid(Msg, ToPid);
          false ->
              logger:debug("courier:handle_cast() server_msg User ~p is not registered and message "
-                ++ "~p will not be delievered.", [ToUser, Msg])
+                ++ "will not be delievered.", [ToUser])
     end,
     {noreply, State};
 

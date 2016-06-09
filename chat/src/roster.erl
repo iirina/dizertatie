@@ -126,11 +126,8 @@ get_latest_used_friends_before('$end_of_table', ObjectList, _Timestamp) ->
 get_latest_used_friends_before(Key, ObjectList, Timestamp) ->
     % {User, Friend, BooleanValue, CurrTimestamp}
     KeyObjectList = ets:lookup(?LATEST_USED_FRIENDS_TAB, Key),
-    logger:debug("roster:get_latest_used_friends_before() KeyObjectList ~p", [KeyObjectList]),
     FilteredKeyObjectList = lists:filter(
         fun({_User, _Friend, _BooleanValue, CurrTimestamp}) ->
-            logger:debug("roster:get_latest_used_friends_before() ~p",
-                [CurrTimestamp < Timestamp]),
             CurrTimestamp < Timestamp
         end,
         KeyObjectList
@@ -223,17 +220,17 @@ handle_call({are_friends, User1, User2}, _From, State) ->
             %% TODO fetch data from mysql if the all tab is empty
             FriendsTuples = ets:lookup(?ALL_FRIENDS_TAB, User1),
             IsFriend = is_name_of(User2, FriendsTuples),
-            logger:debug("roster:handle_call() are_friends(~s,~s) ~p [looked in tab ~p]",
-                [User1, User2, IsFriend, ?ALL_FRIENDS_TAB]),
+            % logger:debug("roster:handle_call() are_friends(~s,~s) ~p [looked in tab ~p]",
+            %     [User1, User2, IsFriend, ?ALL_FRIENDS_TAB]),
             ets:insert(?LATEST_USED_FRIENDS_TAB, {User1, User2, IsFriend, Now}),
             ets:insert(?LATEST_USED_FRIENDS_TAB, {User2, User1, IsFriend, Now}),
             {reply, IsFriend, State};
         FriendsTuples ->
             IsFriend = is_name_of(User2, FriendsTuples),
-            logger:debug("roster:handle_call() are_friends(~s,~s) ~p [looked in tab ~p]",
-                [User1, User2, IsFriend, ?LATEST_USED_FRIENDS_TAB]),
-            logger:debug("roster:handle_call() are_friends(~s,~s) FriendsTuples ~p",
-                [User1, User2, FriendsTuples]),
+            % logger:debug("roster:handle_call() are_friends(~s,~s) ~p [looked in tab ~p]",
+            %     [User1, User2, IsFriend, ?LATEST_USED_FRIENDS_TAB]),
+            % logger:debug("roster:handle_call() are_friends(~s,~s) FriendsTuples ~p",
+            %     [User1, User2, FriendsTuples]),
             update_latest_used_friends_tab(User1, User2, Now),
             update_latest_used_friends_tab(User2, User1, Now),
             {reply, IsFriend, State}
@@ -258,17 +255,17 @@ handle_cast({add_friend, User1, User2}, State) ->
     {noreply, State};
 
 handle_cast(load_friends, State) ->
-    logger:error("registration:handle_cast() load_friends"),
+    % logger:debug("registration:handle_cast() load_friends"),
     MySqlFriends = fetch_friends_from_mysql(),
     lists:foreach(
         fun([User, Friend]) ->
-            ets:insert(?ALL_FRIENDS_TAB, {User, Friend}),
-            logger:debug("roster:handle_cast() load_friends Added ~p to ets ~p",
-                [{User, Friend}, ?ALL_FRIENDS_TAB])
+            ets:insert(?ALL_FRIENDS_TAB, {User, Friend})
+            % logger:debug("roster:handle_cast() load_friends Added ~p to ets ~p",
+            %     [{User, Friend}, ?ALL_FRIENDS_TAB])
         end,
         MySqlFriends
     ),
-    logger:error("registration:handle_cast() load_friends ~p", [MySqlFriends]),
+    % logger:debug("registration:handle_cast() load_friends ~p", [MySqlFriends]),
     {noreply, State};
 
 handle_cast(OtherRequest, State) ->
@@ -285,7 +282,7 @@ handle_info(drop_latest_added_friends, State) ->
             % logger:debug("roster:handle_info() drop_latest_added_friends No entries found.");
             ok;
         {Entries, ObjectList} ->
-            logger:debug("roster:handle_info() drop_latest_added_friends Entries ~p.", [Entries]),
+            % logger:debug("roster:handle_info() drop_latest_added_friends Entries ~p.", [Entries]),
             lists:foreach(
                 fun(Object) ->
                     ets:delete_object(?LATEST_ADDED_TAB, Object)
@@ -297,8 +294,8 @@ handle_info(drop_latest_added_friends, State) ->
             MySqlInsertCommand = ?INSERT_FRIENDS_INTO_MYSQL ++ Entries,
             Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand),
             logger:debug(
-                "roster:handle_info() drop_latest_added_friends, MysqlCommand ~p and MySql result: "
-                    ++ "~p", [MySqlInsertCommand, Result])
+                "roster:handle_info() drop_latest_added_friends, MySql result: "
+                    ++ "~p", [Result])
     end,
     {noreply, State};
 
