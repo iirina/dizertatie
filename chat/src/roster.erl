@@ -12,7 +12,8 @@
     remove_friend/2,
     get_friends/1,
     are_friends/2,
-    load_friends/0
+    load_friends/0,
+    dump_mnesia_friends/0
 ]).
 
 %% gen_server callbacks
@@ -25,13 +26,18 @@
     terminate/2
 ]).
 
+-include("../../utils/mnesia_structure.hrl").
+
 -define(LATEST_USED_FRIENDS_TAB, latest_friends_tab).
 -define(LATEST_ADDED_TAB, latest_added_friends_tab).
--define(ALL_FRIENDS_TAB, all_friends_tab).
+
+%% Remove this table
+% -define(ALL_FRIENDS_TAB, all_friends_tab).
 
 %% Time expressed in milliseconds.
--define(TIME_TO_DROP_LATEST_ADDED_FRIENDS, 10 * 1000). %% 1 * 60 * 1000
--define(TIME_TO_UPDATE_LATEST_USED_FRIENDS, 10 * 1000). %% 5 * 60 * 1000
+-define(TIME_TO_DROP_LATEST_ADDED_FRIENDS, 3 * 1000). %% 1 * 60 * 1000
+-define(TIME_TO_UPDATE_LATEST_USED_FRIENDS, 3 * 1000). %% 5 * 60 * 1000
+-define(TIME_TO_DUMP_MNESIA_FRIENDS, 10 * 1000).
 
 -define(MYSQL_ID, "1234").
 -define(FETCH_ALL_FRIENDS_MYSQL, "select * from friends").
@@ -70,18 +76,6 @@ load_friends() ->
 %%%=================================================================================================
 %%% helper functions
 %%%=================================================================================================
-fetch_friends_from_mysql() ->
-    case p1_mysql:fetch(?MYSQL_ID, ?FETCH_ALL_FRIENDS_MYSQL, infinity) of
-        {data, {p1_mysql_result, _FieldList, UsersRetrieved, _Number, _List}} ->
-            logger:debug(
-                "roster:fetch_friends_from_mysql() ~p", [UsersRetrieved]),
-            UsersRetrieved;
-        _Other ->
-            []
-    end.
-
-% get_latest_added_friends_before
-% get_latest_used_friends_before
 
 get_latest_added_friends_before('$end_of_table', Entries, _Timestamp) ->
     % logger:debug(
@@ -141,14 +135,6 @@ get_latest_used_friends_before(Key, ObjectList, Timestamp) ->
 is_name_of(_User, []) ->
     false;
 
-%% For Elements in ALL_FRIENDS_TAB
-is_name_of(User, [{_Key, CurrUser} | List]) ->
-    case User == CurrUser of
-        true -> true;
-        false ->
-            is_name_of(User, List)
-    end;
-
 %% For Elements in LATEST_USED_FRIENDS_TAB
 is_name_of(User, [{_Key, CurrUser, BooleanValue, _Timestamp} | List]) ->
     case User == CurrUser of
@@ -180,6 +166,9 @@ delete_friendship_from_latest_used_friends_tab(User, Friend) ->
         UserFriends
     ).
 
+dump_mnesia_friends() ->
+    mnesia:dump_tables([friends]).
+
 %%%=================================================================================================
 %%% gen_server callbacks
 %%%=================================================================================================
@@ -189,7 +178,6 @@ init(_Args) ->
     ets:new(?LATEST_USED_FRIENDS_TAB, [bag, private, named_table]),
     ets:new(?LATEST_ADDED_TAB, [bag, private, named_table]),
     %% TabAllFriends should be populated from mysql when a get on the list is made
-    ets:new(?ALL_FRIENDS_TAB, [bag, private, named_table]),
     case timer:send_interval(?TIME_TO_DROP_LATEST_ADDED_FRIENDS, drop_latest_added_friends) of
         {ok, _DropTref} ->
             logger:debug("roster:init() Timer set for drop_latest_added_friends");
@@ -204,33 +192,37 @@ init(_Args) ->
             logger:error("roster:init() Timer was not set for update_latest_used_friends ~p",
                 [UpdateError])
     end,
+    % case timer:send_interval(?TIME_TO_DUMP_MNESIA_FRIENDS, dump_mnesia_friends) of
+    %     {ok, _DumpTref} ->
+    %         logger:debug("roster:init() Timer set for dump_mnesia_friends");
+    %     {error, DumpError} ->
+    %         logger:error("roster:init() Timer was not set for dump_mnesia_friends ~p", [DumpError])
+    % end,
     {ok, []}.
+
+get_mnesia_friends(User) ->
+    case get_friends_for_user(User) of
+        {atomic, FriendshipList} ->
+            lists:map(fun({friends, _User, Friend}) -> Friend end, FriendshipList);
+        _Other ->
+            []
+    end.
 
 %% Gets a list of friends usernames.
 handle_call({get_friends, User}, {_FromPid, _FromTag}, State) ->
-    %% TODO fetch data from mysql if the tab is empty
-    FriendsTupleList = ets:lookup(?ALL_FRIENDS_TAB, User),
-    FriendsList = lists:map(fun({_Key, Friend}) -> Friend end, FriendsTupleList),
-    {reply, {friends_list, FriendsList}, State};
+    {reply, {friends_list, get_mnesia_friends(User)}, State};
 
 handle_call({are_friends, User1, User2}, _From, State) ->
     Now = now(),
     case ets:lookup(?LATEST_USED_FRIENDS_TAB, User1) of
         [] ->
             %% TODO fetch data from mysql if the all tab is empty
-            FriendsTuples = ets:lookup(?ALL_FRIENDS_TAB, User1),
-            IsFriend = is_name_of(User2, FriendsTuples),
-            % logger:debug("roster:handle_call() are_friends(~s,~s) ~p [looked in tab ~p]",
-            %     [User1, User2, IsFriend, ?ALL_FRIENDS_TAB]),
+            IsFriend = are_mnesia_friends(User1, User2),
             ets:insert(?LATEST_USED_FRIENDS_TAB, {User1, User2, IsFriend, Now}),
             ets:insert(?LATEST_USED_FRIENDS_TAB, {User2, User1, IsFriend, Now}),
             {reply, IsFriend, State};
         FriendsTuples ->
             IsFriend = is_name_of(User2, FriendsTuples),
-            % logger:debug("roster:handle_call() are_friends(~s,~s) ~p [looked in tab ~p]",
-            %     [User1, User2, IsFriend, ?LATEST_USED_FRIENDS_TAB]),
-            % logger:debug("roster:handle_call() are_friends(~s,~s) FriendsTuples ~p",
-            %     [User1, User2, FriendsTuples]),
             update_latest_used_friends_tab(User1, User2, Now),
             update_latest_used_friends_tab(User2, User1, Now),
             {reply, IsFriend, State}
@@ -241,9 +233,6 @@ handle_call(OtherRequest, _From, State) ->
     {noreply, State}.
 
 handle_cast({add_friend, User1, User2}, State) ->
-    ets:insert(?ALL_FRIENDS_TAB, {User1, User2}),
-    ets:insert(?ALL_FRIENDS_TAB, {User2, User1}),
-
     Now = now(),
     delete_friendship_from_latest_used_friends_tab(User1, User2),
     delete_friendship_from_latest_used_friends_tab(User2, User1),
@@ -255,17 +244,6 @@ handle_cast({add_friend, User1, User2}, State) ->
     {noreply, State};
 
 handle_cast(load_friends, State) ->
-    % logger:debug("registration:handle_cast() load_friends"),
-    MySqlFriends = fetch_friends_from_mysql(),
-    lists:foreach(
-        fun([User, Friend]) ->
-            ets:insert(?ALL_FRIENDS_TAB, {User, Friend})
-            % logger:debug("roster:handle_cast() load_friends Added ~p to ets ~p",
-            %     [{User, Friend}, ?ALL_FRIENDS_TAB])
-        end,
-        MySqlFriends
-    ),
-    % logger:debug("registration:handle_cast() load_friends ~p", [MySqlFriends]),
     {noreply, State};
 
 handle_cast(OtherRequest, State) ->
@@ -279,23 +257,16 @@ handle_info(drop_latest_added_friends, State) ->
     Empty = {"", []},
     case get_latest_added_friends_before(ets:first(?LATEST_ADDED_TAB), Empty, Now) of
         {"", []} ->
-            % logger:debug("roster:handle_info() drop_latest_added_friends No entries found.");
             ok;
-        {Entries, ObjectList} ->
-            % logger:debug("roster:handle_info() drop_latest_added_friends Entries ~p.", [Entries]),
+            % {User, Friend, CurrTimestamp}
+        {_Entries, ObjectList} ->
             lists:foreach(
-                fun(Object) ->
+                fun({User, Friend, _Timestamp} = Object) ->
+                    insert_friendship(User, Friend),
                     ets:delete_object(?LATEST_ADDED_TAB, Object)
-                    % logger:debug("roster:handle_info() drop_latest_added_friends deleted object: "
-                    %     ++ "~p from ets ~p", [Object, ?LATEST_ADDED_TAB])
                 end,
                 ObjectList
-            ),
-            MySqlInsertCommand = ?INSERT_FRIENDS_INTO_MYSQL ++ Entries,
-            Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand, infinity),
-            logger:debug(
-                "roster:handle_info() drop_latest_added_friends, MySql result: "
-                    ++ "~p", [Result])
+            )
     end,
     {noreply, State};
 
@@ -306,8 +277,6 @@ handle_info(update_latest_used_friends, State) ->
     lists:foreach(
         fun(Object) ->
             ets:delete_object(?LATEST_USED_FRIENDS_TAB, Object)
-            % logger:debug("registration:handle_info() update_latest_used_tab, Deleted object: ~p "
-            %     ++ "from ets ~p", [Object, ?LATEST_USED_FRIENDS_TAB])
         end,
         ObjToDelete
     ),
