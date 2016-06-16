@@ -32,6 +32,12 @@ insert_friendship(User, Friend) ->
 insert_benchmark(Id, Type, Timestamp, Msg, ReqType) ->
     insert_object(#benchmark{id = Id, type = Type, timestamp = Timestamp, msg = Msg, req_type = ReqType}).
 
+get_user(Username) ->
+    F = fun() ->
+        mnesia:read(user, Username)
+    end,
+    mnesia:transaction(F).
+
 get_all_users() ->
     F = fun() ->
 		User = #user{username='$1',password='$2'},

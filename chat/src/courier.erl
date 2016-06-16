@@ -126,30 +126,35 @@ handle_cast({group_msg, MsgId, FromUser, Msg}, State) ->
     logger:debug(
         "courier:handle_cast() group_msg New group message ~p from user ~p", [Msg, FromUser]),
     NameToPidDict = State#state.name_to_pid,
-    [FromUserPid] = dict:fetch(FromUser, NameToPidDict),
+    case dict:is_key(FromUser, NameToPidDict) of
+        true ->
+            [FromUserPid] = dict:fetch(FromUser, NameToPidDict),
 
-    case roster:get_friends(FromUser) of
-        {friends_list, []} ->
-            logger:debug("courier:handle_cast() group_msg Did not send message ~p to anyone "
-                ++ "because user ~p has no friends yet.", [Msg, FromUser]),
-            socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?NO_FRIENDS, FromUserPid);
-        {friends_list, FriendsList} ->
-            logger:debug("Found friend list: ~p for user ~p", [FriendsList, FromUser]),
+            case roster:get_friends(FromUser) of
+                {friends_list, []} ->
+                    logger:debug("courier:handle_cast() group_msg Did not send message ~p to anyone "
+                        ++ "because user ~p has no friends yet.", [Msg, FromUser]),
+                    socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?NO_FRIENDS, FromUserPid);
+                {friends_list, FriendsList} ->
+                    logger:debug("Found friend list: ~p for user ~p", [FriendsList, FromUser]),
 
-            lists:foreach(
-                fun(User) ->
-                    case dict:is_key(User, NameToPidDict) of
-                        true ->
-                            [UserPid] = dict:fetch(User, NameToPidDict),
-                            socket_handler:send_msg_to_pid(Msg, UserPid);
-                        false ->
-                            logger:debug("courier:handle_cast() group_msg Could not send message to ~p "
-                            ++ "because (s)he is not regitered on this chat.", [User])
-                    end
-                end,
-                FriendsList
-            ),
-            socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?GROUP_MESSAGE_SENT, FromUserPid)
+                    lists:foreach(
+                        fun(User) ->
+                            case dict:is_key(User, NameToPidDict) of
+                                true ->
+                                    [UserPid] = dict:fetch(User, NameToPidDict),
+                                    socket_handler:send_msg_to_pid(Msg, UserPid);
+                                false ->
+                                    logger:debug("courier:handle_cast() group_msg Could not send message to ~p "
+                                    ++ "because (s)he is not regitered on this chat.", [User])
+                            end
+                        end,
+                        FriendsList
+                    ),
+                    socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?GROUP_MESSAGE_SENT, FromUserPid)
+            end;
+        false ->
+            ok
     end,
     {noreply, State};
 

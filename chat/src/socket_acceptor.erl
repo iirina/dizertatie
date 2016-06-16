@@ -8,12 +8,6 @@
 
 -define(DEFAULT_PORT, 5455).
 
--define(MYSQL_ID, "1234").
--define(MYSQL_HOST, "localhost").
--define(MYSQL_USER, "root").
--define(MYSQL_PASSWORD, "parola").
--define(MYSQL_DATABASE, "chat").
-
 start() ->
     SocketOpts = [{active, false}, binary, {packet, 0}],
     Port = ?DEFAULT_PORT,
@@ -28,8 +22,6 @@ start() ->
 
 init(ListenSocket) ->
     logger:debug("socket_acceptor:init() Will initialize loop."),
-    p1_mysql:start_link(?MYSQL_ID, ?MYSQL_HOST, ?MYSQL_USER, ?MYSQL_PASSWORD, ?MYSQL_DATABASE,
-        fun(_Level, Format, Args) -> logger:debug(Format, Args) end),
     registration:load_users(),
     roster:load_friends(),
     loop(ListenSocket).

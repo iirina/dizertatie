@@ -71,7 +71,7 @@ load_friends() ->
 %%% helper functions
 %%%=================================================================================================
 fetch_friends_from_mysql() ->
-    case p1_mysql:fetch(?MYSQL_ID, ?FETCH_ALL_FRIENDS_MYSQL) of
+    case p1_mysql:fetch(?MYSQL_ID, ?FETCH_ALL_FRIENDS_MYSQL, infinity) of
         {data, {p1_mysql_result, _FieldList, UsersRetrieved, _Number, _List}} ->
             logger:debug(
                 "roster:fetch_friends_from_mysql() ~p", [UsersRetrieved]),
@@ -292,7 +292,7 @@ handle_info(drop_latest_added_friends, State) ->
                 ObjectList
             ),
             MySqlInsertCommand = ?INSERT_FRIENDS_INTO_MYSQL ++ Entries,
-            Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand),
+            Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand, infinity),
             logger:debug(
                 "roster:handle_info() drop_latest_added_friends, MySql result: "
                     ++ "~p", [Result])

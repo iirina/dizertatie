@@ -21,6 +21,8 @@
     terminate/2
 ]).
 
+-include("../../utils/mnesia_structure.hrl").
+
 -define(LATEST_REGISTERED_USED_TAB, latest_registered_used_tab).
 -define(LATEST_REGISTERED_ADDED_TAB, latest_registered_added_tab).
 -define(USER_TAKEN, "user_taken").
@@ -34,7 +36,9 @@
 -define(FETCH_ALL_USERS_MYSQL, "select * from user").
 -define(INSERT_USERS_INTO_MYSQL, "insert into user values ").
 
--record(state, {all_registered = sets:new()}).
+% We want to replace the set all_registered with the mnesia table
+%% user
+% -record(state, {all_registered = sets:new()}).
 
 %%%=================================================================================================
 %%% API
@@ -58,21 +62,21 @@ load_users() ->
 %%%=================================================================================================
 %%% Helper functions
 %%%=================================================================================================
-fetch_users_from_mysql() ->
-    case p1_mysql:fetch(?MYSQL_ID, ?FETCH_ALL_USERS_MYSQL) of
-        {data, {p1_mysql_result, _FieldList, UsersRetrieved, _Number, _List}} ->
-            Users = lists:map(
-                fun([User, Pass]) ->
-                    logger:debug(
-                        "registration:fetch_users_from_mysql() User ~p password ~p", [User, Pass]),
-                    User
-                end,
-                UsersRetrieved
-            ),
-            Users;
-        _Other ->
-            []
-    end.
+% fetch_users_from_mysql() ->
+%     case p1_mysql:fetch(?MYSQL_ID, ?FETCH_ALL_USERS_MYSQL) of
+%         {data, {p1_mysql_result, _FieldList, UsersRetrieved, _Number, _List}} ->
+%             Users = lists:map(
+%                 fun([User, Pass]) ->
+%                     logger:debug(
+%                         "registration:fetch_users_from_mysql() User ~p password ~p", [User, Pass]),
+%                     User
+%                 end,
+%                 UsersRetrieved
+%             ),
+%             Users;
+%         _Other ->
+%             []
+%     end.
 
 get_latest_registered_users_before('$end_of_table', Entries, _Timestamp) ->
     % logger:debug(
@@ -138,7 +142,7 @@ init(_Args) ->
     ets:new(?LATEST_REGISTERED_USED_TAB, [set, private, named_table]),
     ets:new(?LATEST_REGISTERED_ADDED_TAB, [set, private, named_table]),
     %% ALL_REGISTERED_TAB should be populated from mysql at the beginning
-    NewState = #state{all_registered = sets:new()},
+    % NewState = #state{all_registered = sets:new()},
     case timer:send_interval(?TIME_TO_DROP_REGISTERED_USERS, drop_registered_users) of
         {ok, _DropTref} ->
             logger:debug("registration:init() Timer set for drop_registered_users");
@@ -153,7 +157,7 @@ init(_Args) ->
             logger:error("registration:init() Timer was not set for update_latest_used_tab ~p",
                 [UpdateError])
     end,
-    {ok, NewState}.
+    {ok, []}.
 
 handle_call({is_registered, User}, _From, State) ->
     Now = now(),
@@ -163,16 +167,12 @@ handle_call({is_registered, User}, _From, State) ->
             %     [User, ?LATEST_REGISTERED_USED_TAB]),
             %% We look for the user in the set that holds all registered users.
             %% TODO: fetch from mysql
-            AllRegisteredSets = State#state.all_registered,
-            case sets:is_element(User, AllRegisteredSets) of
-                true ->
-                    % logger:debug("registration:handle_call() is_registered User ~p is registered.",
-                    %     [User]),
+
+            case get_user(User) of
+                {atomic, [_Element]} ->
                     ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
                     {reply, true, State};
-                false ->
-                    % logger:debug("registration:handle_call() is_registered User ~p is not "
-                    %     ++ "registered.", [User]),
+                _Other ->
                     ets:insert(?LATEST_REGISTERED_USED_TAB, {User, false, Now}),
                     {reply, false, State}
             end;
@@ -188,39 +188,41 @@ handle_call({register, User, Password}, _From, State) ->
     Now = now(),
     logger:debug("registration:handle_cast() register User ~p Password ~p", [User, Password]),
 
-    ExistingRegisteredUsers = State#state.all_registered,
-    case sets:is_element(User, ExistingRegisteredUsers) of
-        true->
+
+    case get_user(User) of
+        {atomic, [_Element]} ->
             logger:debug("register:handle_cast() register User ~p already used.", [User]),
             {reply, {false, ?USER_TAKEN}, State};
-        false ->
-            UpdatedRegisteredUsers = sets:add_element(User, ExistingRegisteredUsers),
+        _Other ->
+            % insert_user(User, Password),
             ets:insert(?LATEST_REGISTERED_ADDED_TAB, {User, Password, Now}),
-            % ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
+            ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
             case ets:lookup(?LATEST_REGISTERED_USED_TAB, User) of
                 [] ->
                     ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now});
                 [{User, false, Timestamp}] ->
                     ets:delete_object(?LATEST_REGISTERED_USED_TAB, {User, false, Timestamp}),
                     ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now});
-                 _Other ->
+                 [{_User, true, _Timestamp}] ->
                     ok
             end,
-            NewState = #state{all_registered = UpdatedRegisteredUsers},
-            {reply, {true, ?REGISTRATION_COMPLETED}, NewState}
+            {reply, {true, ?REGISTRATION_COMPLETED}, State}
     end;
 
 handle_call(OtherRequest, _From, State) ->
     logger:error("registration:handle_call() Unknown cast request ~p", [OtherRequest]),
     {noreply, State}.
 
-handle_cast(load_users, _State) ->
-    logger:error("registration:handle_cast() load_users"),
-    MySqlUsers = fetch_users_from_mysql(),
-    RegisteredUsers = sets:from_list(MySqlUsers),
-    NewState = #state{all_registered = RegisteredUsers},
-    logger:error("registration:handle_cast() load_users ~p", [sets:to_list(RegisteredUsers)]),
-    {noreply, NewState};
+handle_cast(load_users, State) ->
+    % logger:debug("registration:handle_cast() load_users"),
+    % MySqlUsers = fetch_users_from_mysql(),
+    % lists:foreach(
+    %     fun(User, Pass) ->
+    %         insert_user(User, Pass)
+    %     end
+    % ),
+    % logger:error("registration:handle_cast() load_users ~p", [MySqlUsers]),
+    {noreply, State};
 
 handle_cast(OtherRequest, State) ->
     logger:error("registration:handle_cast() Unknown cast request ~p", [OtherRequest]),
@@ -235,20 +237,20 @@ handle_info(drop_registered_users, State) ->
         {"", []} ->
             % logger:debug("registration:handle_info() drop_registered_users No entries found.");
             ok;
-        {Entries, ObjectList} ->
+        {_Entries, ObjectList} ->
             % logger:debug("registration:handle_info() drop_registered_users ~p Entries", [Entries]),
             lists:foreach(
-                fun(Object) ->
-                    ets:delete_object(?LATEST_REGISTERED_ADDED_TAB, Object)
+                fun({User, Password, _Timestamp} = Object) ->
+                    ets:delete_object(?LATEST_REGISTERED_ADDED_TAB, Object),
+                    insert_user(User, Password)
                     % logger:debug("registration:handle_info() drop_registered_users, Deleted object:"
                     %     ++ " ~p from ets ~p", [Object, ?LATEST_REGISTERED_ADDED_TAB])
                 end,
                 ObjectList
             ),
-            MySqlInsertCommand = ?INSERT_USERS_INTO_MYSQL ++ Entries,
-            Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand),
-            logger:debug(
-                "registration:handle_info() drop_registered_users, MySql result: ~p", [Result])
+            % MySqlInsertCommand = ?INSERT_USERS_INTO_MYSQL ++ Entries,
+            % Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand),
+            logger:debug("registration:handle_info() drop_registered_users, Inserted into mnesia")
     end,
     {noreply, State};
 
