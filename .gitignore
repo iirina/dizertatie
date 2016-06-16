@@ -1,2 +1,4 @@
 p1_mysql-master/*
 *.log
+*.csv
+*/*.beam
