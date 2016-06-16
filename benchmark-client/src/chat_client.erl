@@ -28,7 +28,7 @@
 -define(INSERT_BENCHMARK_INTO_MYSQL, "insert into benchmark values ").
 
 %% Time expressed in ms.
--define(TIME_TO_DROP_BENCHMARK, 5 * 1000).
+-define(TIME_TO_DROP_BENCHMARK, 30 * 1000).
 
 -record(state, {username, password, socket, bmList}).
 
@@ -49,12 +49,12 @@ start_link(Args) ->
 %%%=================================================================================================
 %%% Helper functions
 %%%=================================================================================================
-send_tcp_msg(Socket, Id, Msg) ->
+send_tcp_msg(Socket, Id, TypOfMsg, Msg) ->
     RequestTime = now(),
     case gen_tcp:send(Socket, Msg) of
         ok ->
             % logger:debug("chat_client:send_tcp_msg() message ~p sent at ~p.", [Msg, RequestTime]),
-            [{Id, "sent", RequestTime, chat_utils:trim_string(Msg)}];
+            [{Id, "sent", TypOfMsg, RequestTime, chat_utils:trim_string(Msg)}];
         {error, _Error} ->
             % logger:debug(
             %     "chat_client:handle_call() auth message not sent due to ~p", [Error]),
@@ -84,7 +84,8 @@ handle_requests(Requests, Timestamp, ClientPid) ->
                     ok;
                 MsgId ->
                     logger:debug("chat_client:handle_requests ~p", [Request]),
-                    gen_server:cast(ClientPid, {add_bm_msg, [{MsgId, "recv", Timestamp, Request}]})
+                    gen_server:cast(ClientPid,
+                        {add_bm_msg, [{MsgId, "recv", "n/a", Timestamp, Request}]})
             end
         end,
         Requests
@@ -129,12 +130,13 @@ maybe_add_comma(CurrString) ->
 get_elements_before([], Result, _Timestamp) ->
     Result;
 
-get_elements_before([{Id, Type, CurrTimestamp, Msg} | RestOfList], {CurrString, CurrList}, Timestamp) ->
+get_elements_before([{Id, Type, ReqType, CurrTimestamp, Msg} | RestOfList], {CurrString, CurrList}, Timestamp) ->
     case CurrTimestamp < Timestamp of
         true ->
             NewString = maybe_add_comma(CurrString) ++ " (\"" ++ Id ++ "\", \"" ++
-                Type ++ "\", \"" ++ get_string_timestamp(CurrTimestamp) ++ "\", \"" ++ Msg ++ "\")",
-            NewList = lists:append(CurrList, [{Id, Type, CurrTimestamp, Msg}]),
+                Type ++ "\", \"" ++ get_string_timestamp(CurrTimestamp) ++ "\", \"" ++ Msg ++
+                    "\", \"" ++ ReqType ++ "\")",
+            NewList = lists:append(CurrList, [{Id, Type, ReqType, CurrTimestamp, Msg}]),
             get_elements_before(RestOfList, {NewString, NewList}, Timestamp);
         false ->
             ok
@@ -177,7 +179,8 @@ handle_cast(register, State) ->
         ok ->
             % logger:debug("chat_client:handle_cast() register message sent."),
             Msg = chat_utils:trim_string(SocketMsg),
-            {noreply, State#state{bmList = lists:append(BmList, [{Id, "sent", RequestTime, Msg}])}};
+            {noreply, State#state{bmList =
+                lists:append(BmList, [{Id, "sent", "register", RequestTime, Msg}])}};
         {error, Error} ->
             logger:error(
                 "chat_client:handle_cast() register message not sent due to ~p", [Error])
@@ -192,7 +195,7 @@ handle_cast(auth, State) ->
     Id = generator:get_id(),
     SocketMsg = Id ++ ",auth," ++ Username ++ "," ++ Password ++ "\n",
     logger:info("chat_client:handle_call() auth ~p", [Username]),
-    case send_tcp_msg(Socket, Id, SocketMsg) of
+    case send_tcp_msg(Socket, Id, "auth", SocketMsg) of
         [] ->
             {noreply, State};
         List ->
@@ -206,7 +209,7 @@ handle_cast({chat, Msg, ToUsername}, State) ->
     Id = generator:get_id(),
     SocketMsg = Id ++ ",chat," ++ ToUsername ++ "," ++ Msg ++ "\n",
     logger:info("chat_client:handle_cast() chat from ~p to ~p.", [Username, ToUsername]),
-    case send_tcp_msg(Socket, Id, SocketMsg) of
+    case send_tcp_msg(Socket, Id, "chat", SocketMsg) of
         [] ->
             {noreply, State};
         List ->
@@ -220,7 +223,7 @@ handle_cast({group, Msg}, State) ->
     Id = generator:get_id(),
     SocketMsg = Id ++ ",group," ++ Msg ++ "\n",
     logger:info("chat_client:handle_cast() group from ~p.", [Username]),
-    case send_tcp_msg(Socket, Id, SocketMsg) of
+    case send_tcp_msg(Socket, Id,"group", SocketMsg) of
         [] ->
             {noreply, State};
         List ->
@@ -234,7 +237,7 @@ handle_cast({accept_friend_request, Friend}, State) ->
     Id = generator:get_id(),
     SocketMsg = Id ++ ",accept_friend_request," ++ Friend ++ "\n",
     logger:info("chat_client:handle_cast() accept_friend_request ~p for ~p.", [Friend, Username]),
-    case send_tcp_msg(Socket, Id, SocketMsg) of
+    case send_tcp_msg(Socket, Id, "accept_friend_request", SocketMsg) of
         [] ->
             {noreply, State};
         List ->
@@ -272,7 +275,7 @@ handle_info(drop_benchmark, State) ->
                 BmListBefore
             ),
             MySqlInsertCommand = ?INSERT_BENCHMARK_INTO_MYSQL ++ StringBm,
-            _Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand),
+            _Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand, infinity),
             % logger:debug("chat_client:handle_info() drop_benchmark Command ~p",
             %     [MySqlInsertCommand]),
             {noreply, State#state{bmList = NewList}}

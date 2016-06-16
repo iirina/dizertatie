@@ -30,12 +30,12 @@
 -define(MYSQL_PASSWORD, "parola").
 -define(MYSQL_DATABASE, "chat").
 
--define(NR_USERS, 100).
--define(NR_FRIENDSHIP, 100).
--define(NR_MESSAGES, 100).
--define(NR_GROUP_MESSAGES, 100).
--define(BATCH_SIZE, 2).
--define(MAX_MESSAGE_LENGTH, 10).
+-define(NR_USERS, 1000).
+-define(NR_FRIENDSHIP, 1000).
+-define(NR_MESSAGES, 1000).
+-define(NR_GROUP_MESSAGES, 1000).
+-define(BATCH_SIZE, 1000).
+-define(MAX_MESSAGE_LENGTH, 20).
 
 -record(state, {pids = [], usernames = []}).
 
@@ -99,6 +99,35 @@ get_random_group_messages(NrMessages, ExistingMessages) ->
 
 send_msg_to_pid(Pid, Msg) ->
         Pid ! Msg.
+
+send_batches(NrBatches, Pids, Usernames) when NrBatches >= 1 ->
+    Messages = get_random_messages(?BATCH_SIZE, []),
+    lists:foreach(
+        fun({PidIndex, UserIndex, Message}) ->
+            Pid = lists:nth(PidIndex, Pids),
+            From = lists:nth(UserIndex, Usernames),
+            spawn(bm_generator, send_msg_to_pid, [Pid, {chat, Message, From}])
+        end,
+        Messages
+    ),
+    timer:apply_after(5000, bm_generator, send_batches, [NrBatches - 1, Pids, Usernames]);
+
+send_batches(NrBatches, _Pids, _Usernames) when NrBatches < 1 ->
+    ok.
+
+send_batch_group(NrBatches, Pids) when NrBatches >= 1 ->
+    Messages = get_random_group_messages(?BATCH_SIZE, []),
+    lists:foreach(
+        fun({PidIndex, Message}) ->
+            Pid = lists:nth(PidIndex, Pids),
+            spawn(bm_generator, send_msg_to_pid, [Pid, {group, Message}])
+        end,
+        Messages
+    ),
+    timer:apply_after(5000, bm_generator, send_batches, [NrBatches - 1, Pids]);
+
+send_batch_group(NrBatches, _Pids) when NrBatches < 1 ->
+    ok.
 
 %%%=================================================================================================
 %%% gen_server callbacks
@@ -166,39 +195,20 @@ handle_cast(make_friends, State) ->
     {noreply, State};
 
 handle_cast(send_messages, State) ->
-    Pids = State#state.pids,
-    Usernames = State#state.usernames,
     %% Add ?NR_FRIENDSHIP pairs (u1, u2) to mysql
     random:seed(erlang:now()),
-    Messages = get_random_messages(?NR_MESSAGES, []),
-
-    %% This is seq
-    lists:foreach(
-        fun({PidIndex, UserIndex, Message}) ->
-            Pid = lists:nth(PidIndex, Pids),
-            From = lists:nth(UserIndex, Usernames),
-            spawn(bm_generator, send_msg_to_pid, [Pid, {chat, Message, From}])
-        end,
-        Messages
-    ),
-    gen_server:cast(bm_generator, send_group_messages),
+    NrBatches = ?NR_MESSAGES / ?BATCH_SIZE,
+    send_batches(NrBatches, State#state.pids, State#state.usernames),
+    timer:apply_after(7000, gen_server, cast, [bm_generator, send_group_messages]),
     {noreply, State};
 
 handle_cast(send_group_messages, State) ->
-    Pids = State#state.pids,
     %% Add ?NR_FRIENDSHIP pairs (u1, u2) to mysql
     random:seed(erlang:now()),
-    Messages = get_random_group_messages(?NR_GROUP_MESSAGES, []),
     % logger:debug("bm_generator:handle_cast() send_group_messages ~p", [Messages]),
+    NrBatches = ?NR_GROUP_MESSAGES / ?BATCH_SIZE,
+    send_batch_group(NrBatches, State#state.pids),
 
-    %% This is seq
-    lists:foreach(
-        fun({PidIndex, Message}) ->
-            Pid = lists:nth(PidIndex, Pids),
-            spawn(bm_generator, send_msg_to_pid, [Pid, {group, Message}])
-        end,
-        Messages
-    ),
     % gen_server:cast(bm_generator, send_group_messages),
     {noreply, State};
 
