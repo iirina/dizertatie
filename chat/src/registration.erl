@@ -62,21 +62,6 @@ load_users() ->
 %%%=================================================================================================
 %%% Helper functions
 %%%=================================================================================================
-% fetch_users_from_mysql() ->
-%     case p1_mysql:fetch(?MYSQL_ID, ?FETCH_ALL_USERS_MYSQL) of
-%         {data, {p1_mysql_result, _FieldList, UsersRetrieved, _Number, _List}} ->
-%             Users = lists:map(
-%                 fun([User, Pass]) ->
-%                     logger:debug(
-%                         "registration:fetch_users_from_mysql() User ~p password ~p", [User, Pass]),
-%                     User
-%                 end,
-%                 UsersRetrieved
-%             ),
-%             Users;
-%         _Other ->
-%             []
-%     end.
 
 get_latest_registered_users_before('$end_of_table', Entries, _Timestamp) ->
     % logger:debug(
@@ -142,7 +127,6 @@ init(_Args) ->
     ets:new(?LATEST_REGISTERED_USED_TAB, [set, private, named_table]),
     ets:new(?LATEST_REGISTERED_ADDED_TAB, [set, private, named_table]),
     %% ALL_REGISTERED_TAB should be populated from mysql at the beginning
-    % NewState = #state{all_registered = sets:new()},
     case timer:send_interval(?TIME_TO_DROP_REGISTERED_USERS, drop_registered_users) of
         {ok, _DropTref} ->
             logger:debug("registration:init() Timer set for drop_registered_users");
@@ -166,8 +150,6 @@ handle_call({is_registered, User}, _From, State) ->
             % logger:debug("registration:handle_call() is_registered User ~p is not in ets table ~p",
             %     [User, ?LATEST_REGISTERED_USED_TAB]),
             %% We look for the user in the set that holds all registered users.
-            %% TODO: fetch from mysql
-
             case get_user(User) of
                 {atomic, [_Element]} ->
                     ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
@@ -194,7 +176,6 @@ handle_call({register, User, Password}, _From, State) ->
             logger:debug("register:handle_cast() register User ~p already used.", [User]),
             {reply, {false, ?USER_TAKEN}, State};
         _Other ->
-            % insert_user(User, Password),
             ets:insert(?LATEST_REGISTERED_ADDED_TAB, {User, Password, Now}),
             ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
             case ets:lookup(?LATEST_REGISTERED_USED_TAB, User) of
@@ -214,14 +195,6 @@ handle_call(OtherRequest, _From, State) ->
     {noreply, State}.
 
 handle_cast(load_users, State) ->
-    % logger:debug("registration:handle_cast() load_users"),
-    % MySqlUsers = fetch_users_from_mysql(),
-    % lists:foreach(
-    %     fun(User, Pass) ->
-    %         insert_user(User, Pass)
-    %     end
-    % ),
-    % logger:error("registration:handle_cast() load_users ~p", [MySqlUsers]),
     {noreply, State};
 
 handle_cast(OtherRequest, State) ->
@@ -248,8 +221,6 @@ handle_info(drop_registered_users, State) ->
                 end,
                 ObjectList
             ),
-            % MySqlInsertCommand = ?INSERT_USERS_INTO_MYSQL ++ Entries,
-            % Result = p1_mysql:fetch(?MYSQL_ID, MySqlInsertCommand),
             logger:debug("registration:handle_info() drop_registered_users, Inserted into mnesia")
     end,
     {noreply, State};
