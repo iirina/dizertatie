@@ -21,10 +21,7 @@ start_link() ->
     supervisor:start_link({local, benchmark_sup}, benchmark_sup, []).
 
 init(_Args) ->
-    logger:debug("benchmark_sup:init() PID = ~w", [self()]),
-
-    p1_mysql:start_link(?MYSQL_ID, ?MYSQL_HOST, ?MYSQL_USER, ?MYSQL_PASSWORD, ?MYSQL_DATABASE,
-        fun(_Level, Format, Args) -> logger:debug(Format, Args) end),
+    logger:debug("benchmark_sup:init() PID = ~w", [self()]),    
 
     BenchmarkGeneratorSup = {
         bm_generator_sup,

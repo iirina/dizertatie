@@ -48,29 +48,12 @@ get_unique_name(UsedNamesSet) ->
             Name
     end.
 
-fetch_users_from_mysql() ->
-    case p1_mysql:fetch(?MYSQL_ID, ?FETCH_ALL_USERS_MYSQL) of
-        {data, {p1_mysql_result, _FieldList, UsersRetrieved, _Number, _List}} ->
-            Users = lists:map(
-                fun([User, _Pass]) ->
-                    % logger:debug(
-                    %     "generator:fetch_users_from_mysql() User ~p password ~p", [User, Pass]),
-                    User
-                end,
-                UsersRetrieved
-            ),
-            Users;
-        _Other ->
-            []
-    end.
-
 %%%=================================================================================================
 %%% gen_server callbacks
 %%%=================================================================================================
 init(_Args) ->
     random:seed(erlang:now()),
-    Names = sets:from_list(fetch_users_from_mysql()),
-    {ok, #state{id = 1, names = Names}}.
+    {ok, #state{id = 1, names = sets:new()}}.
 
 handle_call(get_id, _From, State) ->
     Id = State#state.id,

@@ -251,8 +251,8 @@ terminate(Reason, State) ->
 	{Socket, Name} = State,
 	inet:close(Socket),
 	chat_utils:log_message(Name, "terminating, pid=~w, reason=~w", [self(), Reason]),
-	courier:group_message("server", "server", chat_utils:format_notification(Name,"disconnected")), % inform
-	courier:disconnected(),
+	courier:group_message("server", "server", chat_utils:format_notification(Name,"disconnected")),
+	courier:disconnected(Name),
 	ok.
 
 code_change(_OldVsn, State, _Extra) ->

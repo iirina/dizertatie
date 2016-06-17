@@ -29,8 +29,8 @@
 -define(REGISTRATION_COMPLETED, "registration_completed").
 
 %% Time expressed in milliseconds.
--define(TIME_TO_DROP_REGISTERED_USERS, 10 * 1000). %% 1 * 60 * 1000
--define(TIME_TO_UPDATE_LATEST_USED_TAB, 10 * 1000). %% 5 * 60 * 1000
+-define(TIME_TO_DROP_REGISTERED_USERS, 1000). %% 1 * 60 * 1000
+-define(TIME_TO_UPDATE_LATEST_USED_TAB, 1000). %% 5 * 60 * 1000
 
 -define(MYSQL_ID, "1234").
 -define(FETCH_ALL_USERS_MYSQL, "select * from user").

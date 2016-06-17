@@ -12,8 +12,7 @@
 -export([
     start_link/0,
     connected/2,
-    is_valid/1,
-    disconnected/0,
+    disconnected/1,
     group_message/3,
     chat/4,
     server_msg/2
@@ -29,15 +28,26 @@
     terminate/2
 ]).
 
+-export([
+    drop_courier_ets_to_mnesia/0
+]).
+
+-include("../../utils/mnesia_structure.hrl").
+
 -define(MESSAGE_SENT, "message_sent").
 -define(GROUP_MESSAGE_SENT, "group_message_sent").
 -define(NO_FRIENDS, "no_friends").
 -define(FRIEND_UNAVAILABLE, "friend_unavailable").
 -define(NOT_FRIENDS, "not_friends").
 
+-define(LATEST_CONNECTED_USERS, latest_connected_users).
+-define(LATEST_ACTIVE_USERS, latest_active_users).
+
+-define(TIME_TO_DROP_ETS, 1000).
+
 %% The state of this gen_server is relevant only for the connected users.
 %% Registered users that are offline can be fetch from the registration gen_server.
--record(state, {pid_to_name = dict:new(), name_to_pid = dict:new()}).
+% -record(state, {pid_to_name = dict:new(), name_to_pid = dict:new()}).
 
 %%%=================================================================================================
 %%% API
@@ -50,11 +60,8 @@ start_link() ->
 connected(Name, SocketServerPid) ->
     gen_server:cast(courier, {connected, Name, SocketServerPid}).
 
-is_valid(Name) ->
-    gen_server:call(courier, {is_valid, Name}).
-
-disconnected() ->
-    gen_server:call(courier, disconnected).
+disconnected(User) ->
+    gen_server:call(courier, {disconnected, User}).
 
 group_message(MsgId, From, Msg) ->
     gen_server:cast(courier, {group_msg, MsgId, From, lists:flatten(Msg)}).
@@ -67,69 +74,102 @@ server_msg(ToUser, Msg) ->
     gen_server:cast(courier, {server_msg, ToUser, lists:flatten(Msg)}).
 
 %%%=================================================================================================
+%%% Helper functions
+%%%=================================================================================================
+get_obj_before_from_tabel(_Tab, '$end_of_table', _Time, CollectedObjects) ->
+    CollectedObjects;
+
+get_obj_before_from_tabel(Tab, Key, Time, CollectedObjects) ->
+    [{User, Pid, Timestamp}] = ets:lookup(Tab, Key),
+    case Timestamp < Time of
+        true ->
+            get_obj_before_from_tabel(Tab, ets:next(Tab, Key), Time,
+                lists:append(CollectedObjects, [{User, Pid, Timestamp}]));
+        false ->
+            get_obj_before_from_tabel(Tab, ets:next(Tab, Key), Time, CollectedObjects)
+    end.
+
+dump_to_mnesia(Objects) ->
+    lists:foreach(
+        fun({User, Pid, _Timestamp}) ->
+            insert_to_courier(User, Pid)
+        end,
+        Objects).
+
+remove_from_tabel(Tab, Objects) ->
+    lists:foreach(
+        fun(Object) ->
+            ets:delete_object(Tab, Object)
+        end,
+        Objects).
+
+drop_courier_ets_to_mnesia() ->
+    Now = now(),
+    LatestConnected = get_obj_before_from_tabel(
+        ?LATEST_CONNECTED_USERS, ets:first(?LATEST_CONNECTED_USERS), Now, []),
+    LatestActive = get_obj_before_from_tabel(
+        ?LATEST_ACTIVE_USERS, ets:first(?LATEST_ACTIVE_USERS), Now, []),
+    dump_to_mnesia(LatestConnected),
+    remove_from_tabel(?LATEST_CONNECTED_USERS, LatestConnected),
+    remove_from_tabel(?LATEST_ACTIVE_USERS, LatestActive).
+
+%%%=================================================================================================
 %%% gen_server callbacks
 %%%=================================================================================================
 init(_Args) ->
-    NewState = #state{
-        pid_to_name = dict:new(), name_to_pid = dict:new()},
-	{ok, NewState}.
+    % {User, Pid, Timestamp}
+    ets:new(?LATEST_CONNECTED_USERS, [set, private, named_table]),
+    ets:new(?LATEST_ACTIVE_USERS, [set, private, named_table]),
+    case timer:send_interval(?TIME_TO_DROP_ETS, drop_courier_ets_to_mnesia) of
+        {ok, _Tref} ->
+            logger:debug("roster:init() Timer set for drop_courier_ets_to_mnesia");
+        {error, Error} ->
+            logger:error("roster:init() Timer was not set for drop_courier_ets_to_mnesia ~p",
+                [Error])
+    end,
+	{ok, []}.
 
-handle_call({is_valid, Name}, {_FromPid, _FromTag}, State) ->
-    NameToPid = State#state.name_to_pid,
-    case dict:is_key(Name, NameToPid) of
-        true ->
-            % the name is already in use.
-            logger:info("courier:is_valid() Name ~p is already in use.", [Name]),
-            {reply, invalid, State};
-        false ->
-            logger:info("courier:is_valid() Name ~p is ok to use.", [Name]),
-            {reply, ok, State}
-    end;
-
-handle_call(disconnected, {FromPid, _FromTag}, State) ->
-    PidToName = State#state.pid_to_name,
-    NameToPid = State#state.name_to_pid,
-    case dict:is_key(FromPid, PidToName) of
-        true ->
-            Name = dict:fetch(FromPid, PidToName),
-            logger:info("courier:disconnected() User ~p disconnected (PID = ~p)", [Name, FromPid]),
-            NewPidToName = dict:erase(FromPid, PidToName),
-            NewNameToPid = dict:erase(Name, NameToPid),
-            NewState = State#state{pid_to_name = NewPidToName, name_to_pid = NewNameToPid},
-            {reply, ok, NewState};
-        false ->
-            {reply, ok, State}
-    end;
+handle_call({disconnected, User}, {FromPid, _FromTag}, State) ->
+    logger:info("courier:disconnected() User ~p disconnected (PID = ~p)", [User, FromPid]),
+    remove_from_courier(User, FromPid),
+    {reply, ok, State};
 
 handle_call(Request, From, State) ->
     logger:error("courier:handle_call(): Unknown request ~p from PID ~p", [Request, From]),
     {noreply, State}.
 
-handle_cast({connected, Name, SocketServerPid}, State) ->
-    logger:debug("courier:connected() Trying to connect user ~p", [Name]),
-    PidToName = State#state.pid_to_name,
-    NameToPid = State#state.name_to_pid,
-    case dict:is_key(Name, NameToPid) of
-        true ->
-            % the name is already in use.
-            logger:info("courier:connected() Name ~p is already in use.", [Name]),
-            {noreply, State};
-        false ->
-            NewPidToName = dict:append(SocketServerPid, Name, PidToName),
-            NewNameToPid = dict:append(Name, SocketServerPid, NameToPid),
-            logger:info("courier:connected() User ~p is now connected.", [Name]),
-            NewState = State#state{pid_to_name = NewPidToName, name_to_pid = NewNameToPid},
-            {noreply, NewState}
-    end;
+get_pid(User) ->
+    Now = now(),
+    Pid = case ets:lookup(?LATEST_ACTIVE_USERS, User) of
+        {_User, UserPid, _Timestamp} ->
+            UserPid;
+        _Other ->
+            get_pid_for_user(User)
+    end,
+    case Pid of
+        no_pid ->
+            no_action;
+        _Pid ->
+            Object = {User, Pid, Now},
+            ets:insert(?LATEST_ACTIVE_USERS, Object)
+    end,
+    Pid.
+
+handle_cast({connected, User, SocketServerPid}, State) ->
+    logger:debug("courier:connected() Trying to connect user ~p", [User]),
+    Now = now(),
+    ets:insert(?LATEST_CONNECTED_USERS, {User, SocketServerPid, Now}),
+    ets:insert(?LATEST_ACTIVE_USERS, {User, SocketServerPid, Now}),
+    logger:info("courier:connected() User ~p is now connected.", [User]),
+    {noreply, State};
 
 handle_cast({group_msg, MsgId, FromUser, Msg}, State) ->
     logger:debug(
         "courier:handle_cast() group_msg New group message ~p from user ~p", [Msg, FromUser]),
-    NameToPidDict = State#state.name_to_pid,
-    case dict:is_key(FromUser, NameToPidDict) of
-        true ->
-            [FromUserPid] = dict:fetch(FromUser, NameToPidDict),
-
+    case  get_pid(FromUser) of
+        no_pid ->
+            ok;
+        FromUserPid ->
             case roster:get_friends(FromUser) of
                 {friends_list, []} ->
                     logger:debug("courier:handle_cast() group_msg Did not send message ~p to anyone "
@@ -137,49 +177,40 @@ handle_cast({group_msg, MsgId, FromUser, Msg}, State) ->
                     socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?NO_FRIENDS, FromUserPid);
                 {friends_list, FriendsList} ->
                     logger:debug("Found friend list: ~p for user ~p", [FriendsList, FromUser]),
-
                     lists:foreach(
                         fun(User) ->
-                            case dict:is_key(User, NameToPidDict) of
-                                true ->
-                                    [UserPid] = dict:fetch(User, NameToPidDict),
-                                    socket_handler:send_msg_to_pid(Msg, UserPid);
-                                false ->
-                                    logger:debug("courier:handle_cast() group_msg Could not send message to ~p "
-                                    ++ "because (s)he is not regitered on this chat.", [User])
+                            case get_pid(User) of
+                                no_pid ->
+                                    logger:debug("courier:handle_cast() group_msg Could not send "
+                                        ++ "message to ~p because s/he is not registered.", [User]);
+                                UserPid ->
+                                    socket_handler:send_msg_to_pid(Msg, UserPid)
                             end
                         end,
                         FriendsList
                     ),
                     socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?GROUP_MESSAGE_SENT, FromUserPid)
-            end;
-        false ->
-            ok
+            end
     end,
     {noreply, State};
 
 handle_cast({chat, MsgId, FromUser, ToUser, Msg}, State) ->
     logger:debug("courier:handle_cast() chat New message for user ~p", [ToUser]),
-    NameToPidDict = State#state.name_to_pid,
-    [FromUserPid] = dict:fetch(FromUser, NameToPidDict),
+    FromUserPid = get_pid(FromUser),
     case roster:are_friends(FromUser, ToUser) of
         true ->
-            % logger:debug(
-                % "courier:handle_cast() chat Users ~p and ~p are friends.", [FromUser, ToUser]),
-
             %% We need the pid of ToUser.
-            case dict:is_key(ToUser, NameToPidDict) of
-                true ->
-                    [ToPid] = dict:fetch(ToUser, NameToPidDict),
-                    logger:debug("courier:handle_cast() chat Found PID ~p for user ~p.",
-                        [ToPid, ToUser]),
-                    socket_handler:send_msg_to_pid(Msg, ToPid),
-                    socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?MESSAGE_SENT, FromUserPid);
-                false ->
+            case get_pid(ToUser) of
+                no_pid ->
                     logger:debug("courier:handle_cast() chat Could not send message ~p to user"
                         ++ "~p because (s)he is not regitered on this chat.", [Msg, ToUser]),
                     socket_handler:send_msg_to_pid(
-                        MsgId ++ "," ++ ?FRIEND_UNAVAILABLE, FromUserPid)
+                        MsgId ++ "," ++ ?FRIEND_UNAVAILABLE, FromUserPid);
+                ToPid ->
+                    logger:debug("courier:handle_cast() chat Found PID ~p for user ~p.",
+                        [ToPid, ToUser]),
+                    socket_handler:send_msg_to_pid(Msg, ToPid),
+                    socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?MESSAGE_SENT, FromUserPid)
              end;
          false ->
              logger:debug("courier:handle_cast() chat Could not send message to ~p because (s)he is"
@@ -190,22 +221,25 @@ handle_cast({chat, MsgId, FromUser, ToUser, Msg}, State) ->
 
  handle_cast({server_msg, ToUser, Msg}, State) ->
      logger:debug("courier:handle_cast() server_msg New server message to user ~p", [ToUser]),
-     NameToPidDict = State#state.name_to_pid,
-     case dict:is_key(ToUser, NameToPidDict) of
-         true ->
-             [ToPid] = dict:fetch(ToUser, NameToPidDict),
+     case get_pid(ToUser) of
+         no_pid ->
+             logger:debug("courier:handle_cast() server_msg User ~p is not registered and message "
+                ++ "will not be delievered.", [ToUser]);
+         ToPid ->
              logger:debug(
                 "courier:handle_cast() server_msg Found PID ~p for user ~p.", [ToPid, ToUser]),
-             socket_handler:send_msg_to_pid(Msg, ToPid);
-         false ->
-             logger:debug("courier:handle_cast() server_msg User ~p is not registered and message "
-                ++ "will not be delievered.", [ToUser])
+             socket_handler:send_msg_to_pid(Msg, ToPid)
+
     end,
     {noreply, State};
 
 handle_cast(OtherRequest, State) ->
     logger:error("courier:handle_cast() Unknown cast request <<~p>>", [OtherRequest]),
     {noreply, State}.
+
+handle_info(drop_courier_ets_to_mnesia, State) ->
+    drop_courier_ets_to_mnesia(),
+    {noreply, State};
 
 handle_info(Info, State) ->
 	logger:error("courier:handle_info() Unknown info <<~p>>", [Info]),

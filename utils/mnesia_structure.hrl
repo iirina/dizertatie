@@ -13,7 +13,9 @@
     get_all_users/0,
     get_user/1,
     get_friends_for_user/1,
-    are_mnesia_friends/2
+    are_mnesia_friends/2,
+    get_pid_for_user/1,
+    remove_from_courier/2
 ]).
 
 insert_user(Username, Passowrd) ->
@@ -22,9 +24,25 @@ insert_user(Username, Passowrd) ->
 insert_friendship(User, Friend) ->
     insert_object(#friends{user = User, friend = Friend}).
 
-insert_to_courier(Pid, User) ->
-    insert_object(#courier_pid_to_user{pid = Pid, username = User}),
+insert_to_courier(User, Pid) ->
     insert_object(#courier_user_to_pid{username = User, pid = Pid}).
+
+get_pid_for_user(User) ->
+    F = fun() ->
+        mnesia:read(courier_user_to_pid, User)
+    end,
+    case mnesia:transaction(F) of
+        {atomic, [{courier_user_to_pid, _User, Pid}]} ->
+            Pid;
+        _Other ->
+            no_pid
+    end.
+
+remove_from_courier(User, Pid) ->
+    F = fun() ->
+            mnesia:delete_object({courier_user_to_pid, User, Pid})
+        end,
+    mnesia:transaction(F).
 
 get_user(Username) ->
     F = fun() ->

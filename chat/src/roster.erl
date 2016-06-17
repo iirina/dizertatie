@@ -35,8 +35,8 @@
 % -define(ALL_FRIENDS_TAB, all_friends_tab).
 
 %% Time expressed in milliseconds.
--define(TIME_TO_DROP_LATEST_ADDED_FRIENDS, 3 * 1000). %% 1 * 60 * 1000
--define(TIME_TO_UPDATE_LATEST_USED_FRIENDS, 3 * 1000). %% 5 * 60 * 1000
+-define(TIME_TO_DROP_LATEST_ADDED_FRIENDS, 1000). %% 1 * 60 * 1000
+-define(TIME_TO_UPDATE_LATEST_USED_FRIENDS, 1000). %% 5 * 60 * 1000
 -define(TIME_TO_DUMP_MNESIA_FRIENDS, 10 * 1000).
 
 -define(MYSQL_ID, "1234").
