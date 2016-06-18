@@ -24,19 +24,7 @@
     read/3
 ]).
 
--define(GROUP_MESSAGE_TOKEN, "group").
--define(CHAT_TOKEN, "chat").
--define(GET_FRIENDS_TOKEN, "get_friends").
--define(ADD_FRIEND_TOKEN, "add_friend").
--define(REMOVE_FRIEND_TOKEN, "remove_friend").
--define(ACCEPT_FRIEND_REQUEST_TOKEN, "accept_friend_request").
--define(REJECT_FRIEND_REQUEST_TOKEN, "reject_friend_request").
--define(FRIEND_REQUEST, " wants to be your friend.").
--define(FRIEND_REQUEST_ACCEPTED, " accepted your friend request.").
--define(FRIEND_REQUEST_REJECTED, " rejected your friend request.").
-
--define(FRIENDSHIP_REQUEST_SENT, "friendship_request_sent").
--define(FRIENDSHIP_STATUS_SENT, "friendship_status_sent").
+-include("macros.hrl").
 
 %%%===================================================================
 %%% API
@@ -116,7 +104,7 @@ handle_packet(Packet, User, GenServerPid) ->
             courier:chat(Id, User, To, chat_utils:format_message(User, Message, ?CHAT_TOKEN));
         {get_friends, Id} ->
             logger:debug("socket_handler:handle_packet() Got action get_friends."),
-            {friends_list, FriendsList} = roster:get_friends(User),
+            {friends_list, FriendsList} = roster_master:get_friends(User),
             StringFriendList = string:join(FriendsList, ","),
             %% We send the friend list to the user that requested it.
             gen_server:cast(GenServerPid, {message, Id ++ ",friends:" ++ StringFriendList});
@@ -127,7 +115,7 @@ handle_packet(Packet, User, GenServerPid) ->
         {accept_friend_request, Id, UserRequesting} ->
             logger:debug("socket_handler:handle_packet() Got action accept_friend_request ~p",
                 [UserRequesting]),
-            roster:add_friend(User, UserRequesting),
+            roster_master:add_friend(User, UserRequesting),
             %% Tell the friend that User accepted the friend request.
             courier:server_msg(UserRequesting, User ++ ?FRIEND_REQUEST_ACCEPTED),
             gen_server:cast(GenServerPid, {message, Id ++ "," ++ ?FRIENDSHIP_STATUS_SENT});
@@ -139,7 +127,7 @@ handle_packet(Packet, User, GenServerPid) ->
             gen_server:cast(GenServerPid, {message, Id ++ "," ++ ?FRIENDSHIP_STATUS_SENT});
         {remove_friend, Id, Friend} ->
             logger:debug("socket_handler:handle_packet() Got action remove_friend ~p", [Friend]),
-            roster:remove_friend(User, Friend),
+            roster_master:remove_friend(User, Friend),
             gen_server:cast(GenServerPid, {message, Id ++ "," ++ ?FRIENDSHIP_STATUS_SENT});
         _Other ->
             do_nothing

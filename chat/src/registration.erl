@@ -21,20 +21,9 @@
     terminate/2
 ]).
 
--include("../../utils/mnesia_structure.hrl").
+-include("mnesia_structure.hrl").
+-include("macros.hrl").
 
--define(LATEST_REGISTERED_USED_TAB, latest_registered_used_tab).
--define(LATEST_REGISTERED_ADDED_TAB, latest_registered_added_tab).
--define(USER_TAKEN, "user_taken").
--define(REGISTRATION_COMPLETED, "registration_completed").
-
-%% Time expressed in milliseconds.
--define(TIME_TO_DROP_REGISTERED_USERS, 1000). %% 1 * 60 * 1000
--define(TIME_TO_UPDATE_LATEST_USED_TAB, 1000). %% 5 * 60 * 1000
-
--define(MYSQL_ID, "1234").
--define(FETCH_ALL_USERS_MYSQL, "select * from user").
--define(INSERT_USERS_INTO_MYSQL, "insert into user values ").
 
 % We want to replace the set all_registered with the mnesia table
 %% user
@@ -178,15 +167,6 @@ handle_call({register, User, Password}, _From, State) ->
         _Other ->
             ets:insert(?LATEST_REGISTERED_ADDED_TAB, {User, Password, Now}),
             ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
-            case ets:lookup(?LATEST_REGISTERED_USED_TAB, User) of
-                [] ->
-                    ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now});
-                [{User, false, Timestamp}] ->
-                    ets:delete_object(?LATEST_REGISTERED_USED_TAB, {User, false, Timestamp}),
-                    ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now});
-                 [{_User, true, _Timestamp}] ->
-                    ok
-            end,
             {reply, {true, ?REGISTRATION_COMPLETED}, State}
     end;
 

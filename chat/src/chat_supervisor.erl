@@ -19,6 +19,8 @@
 -define(MYSQL_PASSWORD, "parola").
 -define(MYSQL_DATABASE, "chat").
 
+-include("./mnesia_structure.hrl").
+
 
 start_link() ->
     logger:debug("chat_supervisor:start_link()"),
@@ -28,9 +30,9 @@ init(_Args) ->
     logger:debug("chat_supervisor:init() PID = ~w", [self()]),
 
     %% Starting mnesia and mysql.
-    mnesia:start(),
-    p1_mysql:start_link(?MYSQL_ID, ?MYSQL_HOST, ?MYSQL_USER, ?MYSQL_PASSWORD, ?MYSQL_DATABASE,
-        fun(_Level, Format, Args) -> logger:debug(Format, Args) end),
+    mnesia_init(),
+    % p1_mysql:start_link(?MYSQL_ID, ?MYSQL_HOST, ?MYSQL_USER, ?MYSQL_PASSWORD, ?MYSQL_DATABASE,
+    %     fun(_Level, Format, Args) -> logger:debug(Format, Args) end),
 
     SocketAcceptorSupSpec = {
         socket_acceptor_sup,
@@ -59,13 +61,22 @@ init(_Args) ->
         [courier]
     },
 
-    RosterSpec = {
-        roster,
-        {roster, start_link, []},
+    RosterSupSpec = {
+        roster_sup,
+        {roster_sup, start_link, []},
+        permanent,
+        infinity,
+        supervisor,
+        [roster_sup]
+    },
+
+    RosterMasterSpec = {
+        roster_master,
+        {roster_master, start_link, []},
         permanent,
         brutal_kill,
         worker,
-        [roster]
+        [roster_master]
     },
 
     RegistrationSpec = {
@@ -79,7 +90,8 @@ init(_Args) ->
 
     ChildSpec = [
         RegistrationSpec,
-        RosterSpec,
+        RosterSupSpec,
+        RosterMasterSpec,
         CourierSpec,
         SocketHandlerSupSpec,
         SocketAcceptorSupSpec

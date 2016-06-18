@@ -32,18 +32,8 @@
     drop_courier_ets_to_mnesia/0
 ]).
 
--include("../../utils/mnesia_structure.hrl").
-
--define(MESSAGE_SENT, "message_sent").
--define(GROUP_MESSAGE_SENT, "group_message_sent").
--define(NO_FRIENDS, "no_friends").
--define(FRIEND_UNAVAILABLE, "friend_unavailable").
--define(NOT_FRIENDS, "not_friends").
-
--define(LATEST_CONNECTED_USERS, latest_connected_users).
--define(LATEST_ACTIVE_USERS, latest_active_users).
-
--define(TIME_TO_DROP_ETS, 1000).
+-include("./mnesia_structure.hrl").
+-include("macros.hrl").
 
 %% The state of this gen_server is relevant only for the connected users.
 %% Registered users that are offline can be fetch from the registration gen_server.
@@ -122,9 +112,9 @@ init(_Args) ->
     ets:new(?LATEST_ACTIVE_USERS, [set, private, named_table]),
     case timer:send_interval(?TIME_TO_DROP_ETS, drop_courier_ets_to_mnesia) of
         {ok, _Tref} ->
-            logger:debug("roster:init() Timer set for drop_courier_ets_to_mnesia");
+            logger:debug("courier:init() Timer set for drop_courier_ets_to_mnesia");
         {error, Error} ->
-            logger:error("roster:init() Timer was not set for drop_courier_ets_to_mnesia ~p",
+            logger:error("courieri:init() Timer was not set for drop_courier_ets_to_mnesia ~p",
                 [Error])
     end,
 	{ok, []}.
@@ -140,14 +130,18 @@ handle_call(Request, From, State) ->
 
 get_pid(User) ->
     Now = now(),
+    logger:debug("courier:get_pid(~p)", [User]),
     Pid = case ets:lookup(?LATEST_ACTIVE_USERS, User) of
-        {_User, UserPid, _Timestamp} ->
+        [{_User, UserPid, _Timestamp}] ->
             UserPid;
-        _Other ->
+        Other ->
+            logger:debug("courier:get_pid(~p) Not latest active user, found ~p in ets, will search "
+                ++ "mnesia", [User, Other]),
             get_pid_for_user(User)
     end,
     case Pid of
         no_pid ->
+            logger:debug("courier:get_pid(~p) PID not found", [User]),
             no_action;
         _Pid ->
             Object = {User, Pid, Now},
@@ -170,10 +164,10 @@ handle_cast({group_msg, MsgId, FromUser, Msg}, State) ->
         no_pid ->
             ok;
         FromUserPid ->
-            case roster:get_friends(FromUser) of
+            case roster_master:get_friends(FromUser) of
                 {friends_list, []} ->
-                    logger:debug("courier:handle_cast() group_msg Did not send message ~p to anyone "
-                        ++ "because user ~p has no friends yet.", [Msg, FromUser]),
+                    logger:debug("courier:handle_cast() group_msg Did not send message ~p to anyone"
+                        ++ " because user ~p has no friends yet.", [Msg, FromUser]),
                     socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?NO_FRIENDS, FromUserPid);
                 {friends_list, FriendsList} ->
                     logger:debug("Found friend list: ~p for user ~p", [FriendsList, FromUser]),
@@ -197,7 +191,7 @@ handle_cast({group_msg, MsgId, FromUser, Msg}, State) ->
 handle_cast({chat, MsgId, FromUser, ToUser, Msg}, State) ->
     logger:debug("courier:handle_cast() chat New message for user ~p", [ToUser]),
     FromUserPid = get_pid(FromUser),
-    case roster:are_friends(FromUser, ToUser) of
+    case roster_master:are_friends(FromUser, ToUser) of
         true ->
             %% We need the pid of ToUser.
             case get_pid(ToUser) of
