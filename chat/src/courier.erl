@@ -29,7 +29,8 @@
 ]).
 
 -export([
-    drop_courier_ets_to_mnesia/0
+    drop_courier_ets_to_mnesia/0,
+    dump_to_mnesia/1
 ]).
 
 % -include("mysql_utils.hrl").
@@ -84,7 +85,7 @@ dump_to_mnesia(Objects) ->
     lists:foreach(
         fun({User, Pid, _Timestamp}) ->
             PidString = pid_to_list(Pid),
-            logger:debug("courier:dump_to_mnesia ~p ~p", User, PidString),
+            logger:debug("courier:dump_to_mnesia ~p ~p", [User, PidString]),
             insert_to_courier(User, PidString)
         end,
         Objects).
@@ -146,10 +147,18 @@ get_pid(User) ->
         no_pid ->
             logger:debug("courier:get_pid(~p) PID not found", [User]),
             no_pid;
-        _Pid ->
+        MnesiaPid ->
             Object = {User, Pid, Now},
+            logger:debug("courier:get_pid Mnesia Pid ~p", [MnesiaPid]),
             ets:insert(?LATEST_ACTIVE_USERS, Object),
-            list_to_pid(Pid)
+            case is_pid(MnesiaPid) of
+                true ->
+                    logger:debug("courier:get_pid ~p is pid", [MnesiaPid]),
+                    MnesiaPid;
+                false ->
+                    logger:debug("courier:get_pid ~p is NOT pid", [MnesiaPid]),
+                    list_to_pid(MnesiaPid)
+            end
     end,
     ResultPid.
 

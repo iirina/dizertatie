@@ -40,8 +40,10 @@ insert_to_courier(User, Pid) ->
     % ok.
 
 get_pid_for_user(User) ->
-    case mnesia:dirty_read(courier_user_to_pid, User) of
-        {atomic, [{courier_user_to_pid, _User, Pid}]} ->
+    Result = mnesia:dirty_read(courier_user_to_pid, User),
+    logger:debug("mnesia_utils:get_pid_for_user(~p) ~p", [User, Result]),
+    case Result of
+        [{courier_user_to_pid, _User, Pid}] ->
             Pid;
         _Other ->
             no_pid
@@ -67,7 +69,7 @@ get_all_users() ->
 
 are_mnesia_friends(U1, U2) ->
     case mnesia:dirty_match_object({friends, U1, U2}) of
-        {atomic, [{friends, _User1, _User2}]} ->
+        [{friends, _User1, _User2}] ->
             true;
         _Other ->
             false
