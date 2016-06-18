@@ -125,6 +125,8 @@ drop_friends_to_mnesia(FriendsList) ->
     lists:foreach(
         fun({FriendshipStr, _Timestamp}) ->
             {User, Friend} = get_friends_from_friendship_str(FriendshipStr),
+            logger:debug("roster_master:drop_friends_to_mnesia(~p) ~p ~p",
+                [FriendsList, User, Friend]),
             insert_friendship(User, Friend)
         end,
         FriendsList).
@@ -162,7 +164,7 @@ set_timers() ->
             logger:debug("roster_master:init() Timer set for drop_latest_added_friends");
         {error, DropError} ->
             logger:error(
-            "roster_master:init() Timer was not set for drop_latest_added_friends ~p", 
+            "roster_master:init() Timer was not set for drop_latest_added_friends ~p",
                 [DropError])
     end.
     % case timer:send_interval(?TIME_TO_DUMP_MNESIA_FRIENDS, dump_mnesia_friends) of

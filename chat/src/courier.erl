@@ -32,7 +32,8 @@
     drop_courier_ets_to_mnesia/0
 ]).
 
--include("mysql_utils.hrl").
+% -include("mysql_utils.hrl").
+-include("macros.hrl").
 -include("mnesia_utils.hrl").
 
 %% The state of this gen_server is relevant only for the connected users.
@@ -82,7 +83,9 @@ get_obj_before_from_tabel(Tab, Key, Time, CollectedObjects) ->
 dump_to_mnesia(Objects) ->
     lists:foreach(
         fun({User, Pid, _Timestamp}) ->
-            insert_to_courier(User, Pid)
+            PidString = pid_to_list(Pid),
+            logger:debug("courier:dump_to_mnesia ~p ~p", User, PidString),
+            insert_to_courier(User, PidString)
         end,
         Objects).
 
@@ -139,15 +142,16 @@ get_pid(User) ->
                 ++ "mnesia", [User, Other]),
             get_pid_for_user(User)
     end,
-    case Pid of
+    ResultPid = case Pid of
         no_pid ->
             logger:debug("courier:get_pid(~p) PID not found", [User]),
-            no_action;
+            no_pid;
         _Pid ->
             Object = {User, Pid, Now},
-            ets:insert(?LATEST_ACTIVE_USERS, Object)
+            ets:insert(?LATEST_ACTIVE_USERS, Object),
+            list_to_pid(Pid)
     end,
-    Pid.
+    ResultPid.
 
 handle_cast({connected, User, SocketServerPid}, State) ->
     logger:debug("courier:connected() Trying to connect user ~p", [User]),

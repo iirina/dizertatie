@@ -9,9 +9,9 @@
 %%%=================================================================================================
 -define(LATEST_USED_FRIENDS_TAB, latest_friends_tab).
 -define(LATEST_ADDED_TAB, latest_added_friends_tab).
--define(TIME_TO_DROP_LATEST_ADDED_FRIENDS, 3 * 1000). %% 1 * 3 * 1000
--define(TIME_TO_UPDATE_LATEST_USED_FRIENDS, 3 * 1000). %% 5 * 3 * 1000
--define(TIME_TO_DUMP_MNESIA_FRIENDS, 3 * 1000).
+-define(TIME_TO_DROP_LATEST_ADDED_FRIENDS, 5 * 1000). %% 1 * 5 * 1000
+-define(TIME_TO_UPDATE_LATEST_USED_FRIENDS, 5 * 1000). %% 5 * 5 * 1000
+-define(TIME_TO_DUMP_MNESIA_FRIENDS, 5 * 1000).
 
 %%%=================================================================================================
 %%% MySQL related macros
@@ -39,7 +39,7 @@
 -define(LATEST_CONNECTED_USERS, latest_connected_users).
 -define(LATEST_ACTIVE_USERS, latest_active_users).
 
--define(TIME_TO_DROP_ETS, 3 * 1000).
+-define(TIME_TO_DROP_ETS, 5 * 1000).
 
 %%%=================================================================================================
 %%% registration related macros
@@ -50,8 +50,8 @@
 -define(REGISTRATION_COMPLETED, "registration_completed").
 
 %% Time expressed in milliseconds.
--define(TIME_TO_DROP_REGISTERED_USERS, 3 * 1000). %% 1 * 3 * 1000
--define(TIME_TO_UPDATE_LATEST_USED_TAB, 3 * 1000). %% 5 * 3 * 1000
+-define(TIME_TO_DROP_REGISTERED_USERS, 5 * 1000). %% 1 * 5 * 1000
+-define(TIME_TO_UPDATE_LATEST_USED_TAB, 5 * 1000). %% 5 * 5 * 1000
 
 
 %%%=================================================================================================
