@@ -56,6 +56,9 @@ init(_Args) ->
     roster_master:add_worker_pid(self()),
     {ok, []}.
 
+friendship_str(U1, U2) ->
+    "{"++ U1 ++ "," ++ U2 ++ "}".
+
 %% Gets a list of friends usernames. Queries mnesia since its the only place where all the friends
 %% can be found.
 handle_call({get_friends, User}, _From, State) ->
@@ -63,17 +66,17 @@ handle_call({get_friends, User}, _From, State) ->
 
 handle_call({are_friends, User1, User2}, _From, State) ->
     Now = now(),
-    case ets:lookup(?LATEST_USED_FRIENDS_TAB, {User1, User2}) of
+    case ets:lookup(?LATEST_USED_FRIENDS_TAB, friendship_str(User1, User2)) of
         [] ->
             %% TODO fetch data from mysql if the all tab is empty
             AreFriends = are_mnesia_friends(User1, User2),
-            ets:insert(?LATEST_USED_FRIENDS_TAB, {{User1, User2}, AreFriends, Now}),
-            ets:insert(?LATEST_USED_FRIENDS_TAB, {{User2, User1}, AreFriends, Now}),
+            ets:insert(?LATEST_USED_FRIENDS_TAB, {friendship_str(User1, User2), AreFriends, Now}),
+            ets:insert(?LATEST_USED_FRIENDS_TAB, {friendship_str(User2, User1), AreFriends, Now}),
             {reply, AreFriends, State};
         [{_AllegedFriendship, AreFriends, _Timestamp}] ->
             %% insert overrides old values for the same key.
-            ets:insert(?LATEST_USED_FRIENDS_TAB, {{User1, User2}, AreFriends, Now}),
-            ets:insert(?LATEST_USED_FRIENDS_TAB, {{User2, User1}, AreFriends, Now}),
+            ets:insert(?LATEST_USED_FRIENDS_TAB, {friendship_str(User1, User2), AreFriends, Now}),
+            ets:insert(?LATEST_USED_FRIENDS_TAB, {friendship_str(User2, User1), AreFriends, Now}),
             {reply, AreFriends, State}
     end;
 
@@ -84,11 +87,11 @@ handle_call(OtherRequest, _From, State) ->
 handle_cast({add_friend, User1, User2}, State) ->
     Now = now(),
     %% insert overrides old values for the same key.
-    ets:insert(?LATEST_USED_FRIENDS_TAB, {{User1, User2}, true, Now}),
-    ets:insert(?LATEST_USED_FRIENDS_TAB, {{User2, User1}, true, Now}),
+    ets:insert(?LATEST_USED_FRIENDS_TAB, {friendship_str(User1, User2), true, Now}),
+    ets:insert(?LATEST_USED_FRIENDS_TAB, {friendship_str(User2, User1), true, Now}),
 
-    ets:insert(?LATEST_ADDED_TAB, {{User1, User2}, Now}),
-    ets:insert(?LATEST_ADDED_TAB, {{User2, User1}, Now}),
+    ets:insert(?LATEST_ADDED_TAB, {friendship_str(User1, User2), Now}),
+    ets:insert(?LATEST_ADDED_TAB, {friendship_str(User2, User1), Now}),
     {noreply, State};
 
 handle_cast(load_friends, State) ->

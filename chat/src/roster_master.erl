@@ -93,10 +93,10 @@ get_first_element_of_queue_and_add_it_to_rear(Queue) ->
 has_timestamp_before(Object, Time, Tab) ->
     case Tab of
         ?LATEST_ADDED_TAB ->
-            {{_User, _Friend}, Timestamp} = Object,
+            {_Friendship, Timestamp} = Object,
             Timestamp < Time;
         ?LATEST_USED_FRIENDS_TAB ->
-            {{_User, _Friend}, _BooleanValue, Timestamp} = Object,
+            {_Friendship, _BooleanValue, Timestamp} = Object,
             Timestamp < Time
     end.
 
@@ -113,9 +113,18 @@ get_latest_before(Tab, Key, Time, CollectedObjects) ->
     ),
     get_latest_before(Tab, Key, Time, lists:append(FilteredObjects, CollectedObjects)).
 
+get_friends_from_friendship_str(FriendshipStr) ->
+    Tokens = string:tokens(FriendshipStr, ","),
+    User1Raw = lists:nth(Tokens, 1),
+    User2Raw = lists:nth(Tokens, 2),
+    User1 = string:sub_string(User1Raw, 2),
+    User2 = string:sub_string(User2Raw, 1, length(User2Raw)),
+    {User1, User2}.
+
 drop_friends_to_mnesia(FriendsList) ->
     lists:foreach(
-        fun({{User, Friend}, _Timestamp}) ->
+        fun({FriendshipStr, _Timestamp}) ->
+            {User, Friend} = get_friends_from_friendship_str(FriendshipStr),
             insert_friendship(User, Friend)
         end,
         FriendsList).
@@ -153,7 +162,8 @@ set_timers() ->
             logger:debug("roster_master:init() Timer set for drop_latest_added_friends");
         {error, DropError} ->
             logger:error(
-                "roster_master:init() Timer was not set for drop_latest_added_friends ~p", [DropError])
+            "roster_master:init() Timer was not set for drop_latest_added_friends ~p", 
+                [DropError])
     end.
     % case timer:send_interval(?TIME_TO_DUMP_MNESIA_FRIENDS, dump_mnesia_friends) of
     %     {ok, _DumpTref} ->

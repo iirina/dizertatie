@@ -32,8 +32,8 @@
     drop_courier_ets_to_mnesia/0
 ]).
 
--include("./mnesia_utils.hrl").
--include("macros.hrl").
+-include("mysql_utils.hrl").
+-include("mnesia_utils.hrl").
 
 %% The state of this gen_server is relevant only for the connected users.
 %% Registered users that are offline can be fetch from the registration gen_server.
