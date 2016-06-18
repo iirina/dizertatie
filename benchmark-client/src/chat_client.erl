@@ -28,7 +28,7 @@
 -define(INSERT_BENCHMARK_INTO_MYSQL, "insert into benchmark values ").
 
 %% Time expressed in ms.
--define(TIME_TO_DROP_BENCHMARK, 10 * 1000).
+-define(TIME_TO_DROP_BENCHMARK, 1 * 1000).
 
 -record(state, {username, password, socket, bmList}).
 

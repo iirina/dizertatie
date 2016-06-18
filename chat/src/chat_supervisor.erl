@@ -13,26 +13,30 @@
 %% supervisor callbacks
 -export([init/1]).
 
--define(MYSQL_ID, "1234").
--define(MYSQL_HOST, "localhost").
--define(MYSQL_USER, "root").
--define(MYSQL_PASSWORD, "parola").
--define(MYSQL_DATABASE, "chat").
-
--include("./mnesia_structure.hrl").
-
+-include("./mnesia_utils.hrl").
+-include("./macros.hrl").
 
 start_link() ->
     logger:debug("chat_supervisor:start_link()"),
     supervisor:start_link({local, chat_supervisor}, chat_supervisor, []).
 
+mysql_init() ->
+    p1_mysql:start_link(?MYSQL_ID, ?MYSQL_HOST, ?MYSQL_USER, ?MYSQL_PASSWORD, ?MYSQL_DATABASE,
+        fun(_Level, Format, Args) -> logger:debug(Format, Args) end).
+
+init_db() ->
+    case ?STORAGE of
+        ?MYSQL ->
+            mysql_init();
+        ?MNESIA ->
+            mnesia_init()
+    end.
+
 init(_Args) ->
     logger:debug("chat_supervisor:init() PID = ~w", [self()]),
 
-    %% Starting mnesia and mysql.
-    mnesia_init(),
-    % p1_mysql:start_link(?MYSQL_ID, ?MYSQL_HOST, ?MYSQL_USER, ?MYSQL_PASSWORD, ?MYSQL_DATABASE,
-    %     fun(_Level, Format, Args) -> logger:debug(Format, Args) end),
+    %% Starting mnesia OR mysql.
+    init_db(),
 
     SocketAcceptorSupSpec = {
         socket_acceptor_sup,

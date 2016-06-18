@@ -9,7 +9,11 @@
 ]).
 
 -export([
-    send_msg_to_pid/2
+    send_msg_to_pid/2,
+    send_batch_messages/3,
+    send_batch_group/2,
+    send_batch_register/2,
+    send_batch_friendship/3
 ]).
 
 %% gen_server callbacks
@@ -30,11 +34,13 @@
 -define(MYSQL_PASSWORD, "parola").
 -define(MYSQL_DATABASE, "chat").
 
--define(NR_USERS, 500).
--define(NR_FRIENDSHIP, 500).
--define(NR_MESSAGES, 500).
--define(NR_GROUP_MESSAGES, 500).
--define(BATCH_SIZE, 500).
+-define(GENERAL_NR, 5).
+
+-define(NR_USERS, ?GENERAL_NR).
+-define(NR_FRIENDSHIP, ?GENERAL_NR).
+-define(NR_MESSAGES, ?GENERAL_NR).
+-define(NR_GROUP_MESSAGES, ?GENERAL_NR).
+-define(BATCH_SIZE, ?GENERAL_NR).
 -define(MAX_MESSAGE_LENGTH, 20).
 
 -record(state, {pids = [], usernames = []}).

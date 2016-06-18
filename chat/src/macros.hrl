@@ -1,17 +1,27 @@
+-define(MYSQL, "mysql").
+-define(MNESIA, "mnesia").
+
+-define(STORAGE, ?MNESIA).
+
 
 %%%=================================================================================================
 %%% roster related macros
 %%%=================================================================================================
 -define(LATEST_USED_FRIENDS_TAB, latest_friends_tab).
 -define(LATEST_ADDED_TAB, latest_added_friends_tab).
--define(TIME_TO_DROP_LATEST_ADDED_FRIENDS, 60 * 1000). %% 1 * 60 * 1000
--define(TIME_TO_UPDATE_LATEST_USED_FRIENDS, 60 * 1000). %% 5 * 60 * 1000
--define(TIME_TO_DUMP_MNESIA_FRIENDS, 60 * 1000).
+-define(TIME_TO_DROP_LATEST_ADDED_FRIENDS, 3 * 1000). %% 1 * 3 * 1000
+-define(TIME_TO_UPDATE_LATEST_USED_FRIENDS, 3 * 1000). %% 5 * 3 * 1000
+-define(TIME_TO_DUMP_MNESIA_FRIENDS, 3 * 1000).
 
 %%%=================================================================================================
 %%% MySQL related macros
 %%%=================================================================================================
 -define(MYSQL_ID, "1234").
+-define(MYSQL_HOST, "localhost").
+-define(MYSQL_USER, "root").
+-define(MYSQL_PASSWORD, "parola").
+-define(MYSQL_DATABASE, "chat").
+
 -define(FETCH_ALL_FRIENDS_MYSQL, "select * from friends").
 -define(INSERT_FRIENDS_INTO_MYSQL, "insert into friends values ").
 -define(FETCH_ALL_USERS_MYSQL, "select * from user").
@@ -29,8 +39,7 @@
 -define(LATEST_CONNECTED_USERS, latest_connected_users).
 -define(LATEST_ACTIVE_USERS, latest_active_users).
 
--define(TIME_TO_DROP_ETS, 60 * 1000).
-
+-define(TIME_TO_DROP_ETS, 3 * 1000).
 
 %%%=================================================================================================
 %%% registration related macros
@@ -41,8 +50,8 @@
 -define(REGISTRATION_COMPLETED, "registration_completed").
 
 %% Time expressed in milliseconds.
--define(TIME_TO_DROP_REGISTERED_USERS, 60 * 1000). %% 1 * 60 * 1000
--define(TIME_TO_UPDATE_LATEST_USED_TAB, 60 * 1000). %% 5 * 60 * 1000
+-define(TIME_TO_DROP_REGISTERED_USERS, 3 * 1000). %% 1 * 3 * 1000
+-define(TIME_TO_UPDATE_LATEST_USED_TAB, 3 * 1000). %% 5 * 3 * 1000
 
 
 %%%=================================================================================================

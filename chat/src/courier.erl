@@ -32,7 +32,7 @@
     drop_courier_ets_to_mnesia/0
 ]).
 
--include("./mnesia_structure.hrl").
+-include("./mnesia_utils.hrl").
 -include("macros.hrl").
 
 %% The state of this gen_server is relevant only for the connected users.

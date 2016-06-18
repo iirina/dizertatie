@@ -22,7 +22,7 @@
 ]).
 
 -include("macros.hrl").
--include("mnesia_structure.hrl").
+-include("mnesia_utils.hrl").
 
 %%%=================================================================================================
 %%% API

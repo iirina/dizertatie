@@ -21,7 +21,7 @@
     terminate/2
 ]).
 
--include("mnesia_structure.hrl").
+-include("mnesia_utils.hrl").
 -include("macros.hrl").
 
 
