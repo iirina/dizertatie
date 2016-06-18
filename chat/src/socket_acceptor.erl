@@ -22,7 +22,6 @@ start() ->
 
 init(ListenSocket) ->
     logger:debug("socket_acceptor:init() Will initialize loop."),
-    registration:load_users(),
     loop(ListenSocket).
 
 loop(ListenSocket) ->

@@ -13,7 +13,6 @@
 %% supervisor callbacks
 -export([init/1]).
 
--include("./mnesia_utils.hrl").
 -include("./macros.hrl").
 
 start_link() ->
@@ -22,14 +21,16 @@ start_link() ->
 
 mysql_init() ->
     p1_mysql:start_link(?MYSQL_ID, ?MYSQL_HOST, ?MYSQL_USER, ?MYSQL_PASSWORD, ?MYSQL_DATABASE,
-        fun(_Level, Format, Args) -> logger:debug(Format, Args) end).
+        fun(_Level, Format, Args) -> logger:debug(Format, Args) end),
+    timer:sleep(2000).
 
 init_db() ->
     case ?STORAGE of
         ?MYSQL ->
             mysql_init();
         ?MNESIA ->
-            mnesia_init()
+            % mnesia_utils:mnesia_init()
+            ok
     end.
 
 init(_Args) ->

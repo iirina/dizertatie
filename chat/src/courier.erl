@@ -29,17 +29,15 @@
 ]).
 
 -export([
-    drop_courier_ets_to_mnesia/0,
-    dump_to_mnesia/1
+    update_latest_ets_table/0
 ]).
 
 % -include("mysql_utils.hrl").
 -include("macros.hrl").
--include("mnesia_utils.hrl").
 
 %% The state of this gen_server is relevant only for the connected users.
 %% Registered users that are offline can be fetch from the registration gen_server.
-% -record(state, {pid_to_name = dict:new(), name_to_pid = dict:new()}).
+% -record(state, {name_to_pid = dict:new()}).
 
 %%%=================================================================================================
 %%% API
@@ -81,15 +79,6 @@ get_obj_before_from_tabel(Tab, Key, Time, CollectedObjects) ->
             get_obj_before_from_tabel(Tab, ets:next(Tab, Key), Time, CollectedObjects)
     end.
 
-dump_to_mnesia(Objects) ->
-    lists:foreach(
-        fun({User, Pid, _Timestamp}) ->
-            PidString = pid_to_list(Pid),
-            logger:debug("courier:dump_to_mnesia ~p ~p", [User, PidString]),
-            insert_to_courier(User, PidString)
-        end,
-        Objects).
-
 remove_from_tabel(Tab, Objects) ->
     lists:foreach(
         fun(Object) ->
@@ -97,13 +86,15 @@ remove_from_tabel(Tab, Objects) ->
         end,
         Objects).
 
-drop_courier_ets_to_mnesia() ->
-    Now = now(),
+seconds_ago({Macro, Sec, Micro}) ->
+    {Macro, Sec - 10, Micro}.
+
+update_latest_ets_table() ->
+    Timestamp = seconds_ago(now()),
     LatestConnected = get_obj_before_from_tabel(
-        ?LATEST_CONNECTED_USERS, ets:first(?LATEST_CONNECTED_USERS), Now, []),
+        ?LATEST_CONNECTED_USERS, ets:first(?LATEST_CONNECTED_USERS), Timestamp, []),
     LatestActive = get_obj_before_from_tabel(
-        ?LATEST_ACTIVE_USERS, ets:first(?LATEST_ACTIVE_USERS), Now, []),
-    dump_to_mnesia(LatestConnected),
+        ?LATEST_ACTIVE_USERS, ets:first(?LATEST_ACTIVE_USERS), Timestamp, []),
     remove_from_tabel(?LATEST_CONNECTED_USERS, LatestConnected),
     remove_from_tabel(?LATEST_ACTIVE_USERS, LatestActive).
 
@@ -114,18 +105,21 @@ init(_Args) ->
     % {User, Pid, Timestamp}
     ets:new(?LATEST_CONNECTED_USERS, [set, private, named_table]),
     ets:new(?LATEST_ACTIVE_USERS, [set, private, named_table]),
-    case timer:send_interval(?TIME_TO_DROP_ETS, drop_courier_ets_to_mnesia) of
+    ets:new(?ALL_CONNECTED_USERS, [set, private, named_table]),
+    case timer:send_interval(?TIME_TO_UPDATE_COURIER_ETS_TABLES, update_latest_ets_table) of
         {ok, _Tref} ->
-            logger:debug("courier:init() Timer set for drop_courier_ets_to_mnesia");
+            logger:debug("courier:init() Timer set for update_latest_ets_table");
         {error, Error} ->
-            logger:error("courieri:init() Timer was not set for drop_courier_ets_to_mnesia ~p",
+            logger:error("courieri:init() Timer was not set for update_latest_ets_table ~p",
                 [Error])
     end,
 	{ok, []}.
 
 handle_call({disconnected, User}, {FromPid, _FromTag}, State) ->
     logger:info("courier:disconnected() User ~p disconnected (PID = ~p)", [User, FromPid]),
-    remove_from_courier(User, FromPid),
+    ets:delete(?ALL_CONNECTED_USERS, User),
+    ets:delete(?LATEST_CONNECTED_USERS, User),
+    ets:delete(?LATEST_ACTIVE_USERS, User),
     {reply, ok, State};
 
 handle_call(Request, From, State) ->
@@ -140,40 +134,48 @@ get_pid(User) ->
             UserPid;
         Other ->
             logger:debug("courier:get_pid(~p) Not latest active user, found ~p in ets, will search "
-                ++ "mnesia", [User, Other]),
-            get_pid_for_user(User)
+                ++ "all connected users", [User, Other]),
+            case ets:lookup(?ALL_CONNECTED_USERS, User) of
+                [{_User, UserPid}] ->
+                    UserPid;
+                _Other ->
+                    no_pid
+            end
     end,
     ResultPid = case Pid of
         no_pid ->
             logger:debug("courier:get_pid(~p) PID not found", [User]),
             no_pid;
-        MnesiaPid ->
+        _Pid ->
             Object = {User, Pid, Now},
-            logger:debug("courier:get_pid Mnesia Pid ~p", [MnesiaPid]),
+            logger:debug("courier:get_pid Pid ~p", [Pid]),
             ets:insert(?LATEST_ACTIVE_USERS, Object),
-            case is_pid(MnesiaPid) of
+            case is_pid(Pid) of
                 true ->
-                    logger:debug("courier:get_pid ~p is pid", [MnesiaPid]),
-                    MnesiaPid;
+                    logger:debug("courier:get_pid ~p is pid", [Pid]),
+                    Pid;
                 false ->
-                    logger:debug("courier:get_pid ~p is NOT pid", [MnesiaPid]),
-                    list_to_pid(MnesiaPid)
+                    logger:debug("courier:get_pid ~p is NOT pid", [Pid]),
+                    list_to_pid(Pid)
             end
     end,
+    logger:debug("courier:get_pid(~p) ~p", [User, ResultPid]),
     ResultPid.
 
 handle_cast({connected, User, SocketServerPid}, State) ->
     logger:debug("courier:connected() Trying to connect user ~p", [User]),
     Now = now(),
-    ets:insert(?LATEST_CONNECTED_USERS, {User, SocketServerPid, Now}),
-    ets:insert(?LATEST_ACTIVE_USERS, {User, SocketServerPid, Now}),
+    StrPid = pid_to_list(SocketServerPid),
+    ets:insert(?LATEST_CONNECTED_USERS, {User, StrPid, Now}),
+    ets:insert(?LATEST_ACTIVE_USERS, {User, StrPid, Now}),
+    ets:insert(?ALL_CONNECTED_USERS, {User, StrPid}),
     logger:info("courier:connected() User ~p is now connected.", [User]),
     {noreply, State};
 
 handle_cast({group_msg, MsgId, FromUser, Msg}, State) ->
     logger:debug(
         "courier:handle_cast() group_msg New group message ~p from user ~p", [Msg, FromUser]),
-    case  get_pid(FromUser) of
+    case get_pid(FromUser) of
         no_pid ->
             ok;
         FromUserPid ->
@@ -222,7 +224,9 @@ handle_cast({chat, MsgId, FromUser, ToUser, Msg}, State) ->
          false ->
              logger:debug("courier:handle_cast() chat Could not send message to ~p because (s)he is"
                 " not a friend of ~p.", [ToUser, FromUser]),
-             socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?NOT_FRIENDS, FromUserPid)
+             socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?NOT_FRIENDS, FromUserPid);
+        Other ->
+            socket_handler:send_msg_to_pid(MsgId ++ "," ++ Other, FromUserPid)
     end,
     {noreply, State};
 
@@ -244,8 +248,8 @@ handle_cast(OtherRequest, State) ->
     logger:error("courier:handle_cast() Unknown cast request <<~p>>", [OtherRequest]),
     {noreply, State}.
 
-handle_info(drop_courier_ets_to_mnesia, State) ->
-    drop_courier_ets_to_mnesia(),
+handle_info(update_latest_ets_table, State) ->
+    update_latest_ets_table(),
     {noreply, State};
 
 handle_info(Info, State) ->

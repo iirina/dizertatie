@@ -1,3 +1,4 @@
+-module(mnesia_utils).
 -record(user, {username, password}).
 
 -record(friends, {user, friend}).
@@ -77,4 +78,5 @@ are_mnesia_friends(U1, U2) ->
     % true.
 
 insert_object(Object) ->
+    logger:debug("mnesia_utils:insert_object ~p", [Object]),
     mnesia:dirty_write(Object).

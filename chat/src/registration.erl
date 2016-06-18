@@ -7,8 +7,7 @@
 -export([
     start_link/0,
     register/2,
-    is_registered/1,
-    load_users/0
+    is_registered/1
 ]).
 
 %% gen_serv er callbacks
@@ -21,13 +20,7 @@
     terminate/2
 ]).
 
--include("mnesia_utils.hrl").
 -include("macros.hrl").
-
-
-% We want to replace the set all_registered with the mnesia table
-%% user
-% -record(state, {all_registered = sets:new()}).
 
 %%%=================================================================================================
 %%% API
@@ -43,10 +36,6 @@ register(User, Password) ->
 is_registered(User) ->
     logger:debug("registration:is_registered(~p)", [User]),
     gen_server:call(registration, {is_registered, User}).
-
-load_users() ->
-    logger:debug("registration:load_users()"),
-    gen_server:cast(registration, load_users).
 
 %%%=================================================================================================
 %%% Helper functions
@@ -107,6 +96,28 @@ get_latest_used_before(Key, ObjectList, Timestamp) ->
         Timestamp
     ).
 
+seconds_ago({Macro, Sec, Micro}) ->
+    {Macro, Sec - 10, Micro}.
+
+is_user_registered(User) ->
+    Now = now(),
+    case ets:lookup(?LATEST_REGISTERED_USED_TAB, User) of
+        [] ->
+            case ets:lookup(?ALL_REGISTERED_TAB, User) of
+                [_Element] ->
+                    ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
+                    true;
+                _Other ->
+                    ets:insert(?LATEST_REGISTERED_USED_TAB, {User, false, Now}),
+                    false
+            end;
+        [{User, IsRegistered, _Timestamp}] ->
+            logger:debug(
+                "registration:handle_call() is_registered User ~p ~p", [User, IsRegistered]),
+            ets:insert(?LATEST_REGISTERED_USED_TAB, {User, IsRegistered, Now}),
+            IsRegistered
+    end.
+
 %%%=================================================================================================
 %%% gen_server callbacks
 %%%=================================================================================================
@@ -115,6 +126,16 @@ init(_Args) ->
     %% TODO see if needed to integrate the option {heir,Pid,HeirData} | {heir,none}
     ets:new(?LATEST_REGISTERED_USED_TAB, [set, private, named_table]),
     ets:new(?LATEST_REGISTERED_ADDED_TAB, [set, private, named_table]),
+    ets:new(?ALL_REGISTERED_TAB, [set, private, named_table]),
+
+    ExistingRegisteredUsers = mysql_utils:get_all_users(),
+    lists:foreach(
+        fun({User, Password}) ->
+            % logger:debug
+            ets:insert(?ALL_REGISTERED_TAB, {User, Password})
+        end,
+        ExistingRegisteredUsers),
+
     %% ALL_REGISTERED_TAB should be populated from mysql at the beginning
     case timer:send_interval(?TIME_TO_DROP_REGISTERED_USERS, drop_registered_users) of
         {ok, _DropTref} ->
@@ -133,38 +154,16 @@ init(_Args) ->
     {ok, []}.
 
 handle_call({is_registered, User}, _From, State) ->
-    Now = now(),
-    case ets:lookup(?LATEST_REGISTERED_USED_TAB, User) of
-        [] ->
-            % logger:debug("registration:handle_call() is_registered User ~p is not in ets table ~p",
-            %     [User, ?LATEST_REGISTERED_USED_TAB]),
-            %% We look for the user in the set that holds all registered users.
-            case get_user(User) of
-                {atomic, [_Element]} ->
-                    ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
-                    {reply, true, State};
-                _Other ->
-                    ets:insert(?LATEST_REGISTERED_USED_TAB, {User, false, Now}),
-                    {reply, false, State}
-            end;
-        [{User, IsRegistered, Timestamp}] ->
-            logger:debug(
-                "registration:handle_call() is_registered User ~p ~p", [User, IsRegistered]),
-            ets:delete_object(?LATEST_REGISTERED_USED_TAB, {User, IsRegistered, Timestamp}),
-            ets:insert(?LATEST_REGISTERED_USED_TAB, {User, IsRegistered, Now}),
-            {reply, IsRegistered, State}
-    end;
+    {reply, is_user_registered(User), State};
 
 handle_call({register, User, Password}, _From, State) ->
     Now = now(),
     logger:debug("registration:handle_cast() register User ~p Password ~p", [User, Password]),
-
-
-    case get_user(User) of
-        {atomic, [_Element]} ->
+    case is_user_registered(User) of
+        true ->
             logger:debug("register:handle_cast() register User ~p already used.", [User]),
             {reply, {false, ?USER_TAKEN}, State};
-        _Other ->
+        false ->
             ets:insert(?LATEST_REGISTERED_ADDED_TAB, {User, Password, Now}),
             ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
             {reply, {true, ?REGISTRATION_COMPLETED}, State}
@@ -173,9 +172,6 @@ handle_call({register, User, Password}, _From, State) ->
 handle_call(OtherRequest, _From, State) ->
     logger:error("registration:handle_call() Unknown cast request ~p", [OtherRequest]),
     {noreply, State}.
-
-handle_cast(load_users, State) ->
-    {noreply, State};
 
 handle_cast(OtherRequest, State) ->
     logger:error("registration:handle_cast() Unknown cast request ~p", [OtherRequest]),
@@ -190,25 +186,25 @@ handle_info(drop_registered_users, State) ->
         {"", []} ->
             % logger:debug("registration:handle_info() drop_registered_users No entries found.");
             ok;
-        {_Entries, ObjectList} ->
+        {Entries, ObjectList} ->
             % logger:debug("registration:handle_info() drop_registered_users ~p Entries", [Entries]),
             lists:foreach(
-                fun({User, Password, _Timestamp} = Object) ->
+                fun(Object) ->
                     ets:delete_object(?LATEST_REGISTERED_ADDED_TAB, Object),
-                    insert_user(User, Password)
+                    mysql_utils:bulk_insert_into_user(Entries)
                     % logger:debug("registration:handle_info() drop_registered_users, Deleted object:"
                     %     ++ " ~p from ets ~p", [Object, ?LATEST_REGISTERED_ADDED_TAB])
                 end,
                 ObjectList
             ),
-            logger:debug("registration:handle_info() drop_registered_users, Inserted into mnesia")
+            logger:debug("registration:handle_info() drop_registered_users, Inserted into mysql")
     end,
     {noreply, State};
 
 handle_info(update_latest_used_tab, State) ->
-    Now = now(),
+    Timestamp = seconds_ago(now()),
     %% Go through all entries of LATEST_REGISTERED_USED_TAB and delete those with Timestamp <= Now.
-    ObjToDelete = get_latest_used_before(ets:first(?LATEST_REGISTERED_USED_TAB), [], Now),
+    ObjToDelete = get_latest_used_before(ets:first(?LATEST_REGISTERED_USED_TAB), [], Timestamp),
     lists:foreach(
         fun(Object) ->
             ets:delete_object(?LATEST_REGISTERED_USED_TAB, Object)

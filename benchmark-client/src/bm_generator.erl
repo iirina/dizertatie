@@ -218,7 +218,7 @@ handle_cast(send_messages, State) ->
     random:seed(erlang:now()),
     NrBatches = ?NR_MESSAGES / ?BATCH_SIZE,
     send_batch_messages(NrBatches, State#state.pids, State#state.usernames),
-    timer:apply_after(500, gen_server, cast, [bm_generator, send_group_messages]),
+    % timer:apply_after(500, gen_server, cast, [bm_generator, send_group_messages]),
     {noreply, State};
 
 handle_cast(send_group_messages, State) ->

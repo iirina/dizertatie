@@ -1,7 +1,7 @@
 -define(MYSQL, "mysql").
 -define(MNESIA, "mnesia").
 
--define(STORAGE, ?MNESIA).
+-define(STORAGE, ?MYSQL).
 
 
 %%%=================================================================================================
@@ -9,6 +9,7 @@
 %%%=================================================================================================
 -define(LATEST_USED_FRIENDS_TAB, latest_friends_tab).
 -define(LATEST_ADDED_TAB, latest_added_friends_tab).
+-define(ALLTIME_FRIENDS_TAB, alltime_friends_tab).
 -define(TIME_TO_DROP_LATEST_ADDED_FRIENDS, 5 * 1000). %% 1 * 5 * 1000
 -define(TIME_TO_UPDATE_LATEST_USED_FRIENDS, 5 * 1000). %% 5 * 5 * 1000
 -define(TIME_TO_DUMP_MNESIA_FRIENDS, 5 * 1000).
@@ -38,14 +39,15 @@
 
 -define(LATEST_CONNECTED_USERS, latest_connected_users).
 -define(LATEST_ACTIVE_USERS, latest_active_users).
-
--define(TIME_TO_DROP_ETS, 5 * 1000).
+-define(ALL_CONNECTED_USERS, all_connected_users).
+-define(TIME_TO_UPDATE_COURIER_ETS_TABLES, 5 * 1000).
 
 %%%=================================================================================================
 %%% registration related macros
 %%%=================================================================================================
 -define(LATEST_REGISTERED_USED_TAB, latest_registered_used_tab).
 -define(LATEST_REGISTERED_ADDED_TAB, latest_registered_added_tab).
+-define(ALL_REGISTERED_TAB, all_registered).
 -define(USER_TAKEN, "user_taken").
 -define(REGISTRATION_COMPLETED, "registration_completed").
 

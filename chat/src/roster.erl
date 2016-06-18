@@ -22,7 +22,6 @@
 ]).
 
 -include("macros.hrl").
--include("mnesia_utils.hrl").
 
 %%%=================================================================================================
 %%% API
@@ -40,12 +39,30 @@ start_link() ->
 %%% helper functions
 %%%=================================================================================================
 %% Returns a list of the usernames of all the User's friends.
-get_mnesia_friends(User) ->
-    case get_friends_for_user(User) of
-        {atomic, FriendshipList} ->
-            lists:map(fun({friends, _User, Friend}) -> Friend end, FriendshipList);
-        _Other ->
-            []
+get_all_friends(User) ->
+    EtsList = ets:lookup(?ALLTIME_FRIENDS_TAB, User),
+    lists:map(fun({_User, Friend}) -> Friend end, EtsList).
+
+are_users_friends(User1, User2) ->
+    Now = now(),
+    case ets:lookup(?LATEST_USED_FRIENDS_TAB, tuple_to_list({User1, User2})) of
+        [] ->
+            % [[{rufsen,dog,7}],[{brunte,horse,5}],[{ludde,dog,5}]]
+            % 7> ets:match(T, {'_',dog,'$1'}).
+            AreFriends = case ets:match_object(?ALLTIME_FRIENDS_TAB, {User1, User2}) of
+                            [_FoundElement] ->
+                                true;
+                            _Other ->
+                                false
+                          end,
+            ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User1, User2}), AreFriends, Now}),
+            ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User2, User1}), AreFriends, Now}),
+            AreFriends;
+        [{_AllegedFriendship, AreFriends, _Timestamp}] ->
+            %% insert overrides old values for the same key.
+            ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User1, User2}), AreFriends, Now}),
+            ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User2, User1}), AreFriends, Now}),
+            AreFriends
     end.
 
 %%%=================================================================================================
@@ -56,29 +73,11 @@ init(_Args) ->
     roster_master:add_worker_pid(self()),
     {ok, []}.
 
-friendship_str(U1, U2) ->
-    "{"++ U1 ++ "," ++ U2 ++ "}".
-
-%% Gets a list of friends usernames. Queries mnesia since its the only place where all the friends
-%% can be found.
 handle_call({get_friends, User}, _From, State) ->
-    {reply, {friends_list, get_mnesia_friends(User)}, State};
+    {reply, {friends_list, get_all_friends(User)}, State};
 
 handle_call({are_friends, User1, User2}, _From, State) ->
-    Now = now(),
-    case ets:lookup(?LATEST_USED_FRIENDS_TAB, friendship_str(User1, User2)) of
-        [] ->
-            %% TODO fetch data from mysql if the all tab is empty
-            AreFriends = are_mnesia_friends(User1, User2),
-            ets:insert(?LATEST_USED_FRIENDS_TAB, {friendship_str(User1, User2), AreFriends, Now}),
-            ets:insert(?LATEST_USED_FRIENDS_TAB, {friendship_str(User2, User1), AreFriends, Now}),
-            {reply, AreFriends, State};
-        [{_AllegedFriendship, AreFriends, _Timestamp}] ->
-            %% insert overrides old values for the same key.
-            ets:insert(?LATEST_USED_FRIENDS_TAB, {friendship_str(User1, User2), AreFriends, Now}),
-            ets:insert(?LATEST_USED_FRIENDS_TAB, {friendship_str(User2, User1), AreFriends, Now}),
-            {reply, AreFriends, State}
-    end;
+    {reply, are_users_friends(User1, User2), State};
 
 handle_call(OtherRequest, _From, State) ->
     logger:error("roster:handle_call() Unknown cast request ~p", [OtherRequest]),
@@ -87,14 +86,14 @@ handle_call(OtherRequest, _From, State) ->
 handle_cast({add_friend, User1, User2}, State) ->
     Now = now(),
     %% insert overrides old values for the same key.
-    ets:insert(?LATEST_USED_FRIENDS_TAB, {friendship_str(User1, User2), true, Now}),
-    ets:insert(?LATEST_USED_FRIENDS_TAB, {friendship_str(User2, User1), true, Now}),
+    ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User1, User2}), true, Now}),
+    ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User2, User1}), true, Now}),
 
-    ets:insert(?LATEST_ADDED_TAB, {friendship_str(User1, User2), Now}),
-    ets:insert(?LATEST_ADDED_TAB, {friendship_str(User2, User1), Now}),
-    {noreply, State};
+    ets:insert(?LATEST_ADDED_TAB, {tuple_to_list({User1, User2}), Now}),
+    ets:insert(?LATEST_ADDED_TAB, {tuple_to_list({User2, User1}), Now}),
 
-handle_cast(load_friends, State) ->
+    ets:insert(?ALLTIME_FRIENDS_TAB, {User1, User2}),
+    ets:insert(?ALLTIME_FRIENDS_TAB, {User2, User1}),
     {noreply, State};
 
 handle_cast(OtherRequest, State) ->
