@@ -39,22 +39,13 @@ init(_Args) ->
     %% Starting mnesia OR mysql.
     init_db(),
 
-    SocketAcceptorSupSpec = {
-        socket_acceptor_sup,
-        {socket_acceptor_sup, start_link, []},
+    ConnDistrSupSpec = {
+        conn_distr_sup,
+        {conn_distr_sup, start_link, []},
         permanent,
         infinity,
         supervisor,
-        [socket_acceptor_sup]
-    },
-
-    SocketHandlerSupSpec = {
-        socket_handler_sup,
-        {socket_handler_sup, start_link, []},
-        permanent,
-        infinity,
-        supervisor,
-        [socket_handler_sup]
+        [conn_distr_sup]
     },
 
     CourierSpec = {
@@ -98,8 +89,7 @@ init(_Args) ->
         RosterSupSpec,
         RosterMasterSpec,
         CourierSpec,
-        SocketHandlerSupSpec,
-        SocketAcceptorSupSpec
+        ConnDistrSupSpec
     ],
     SupFlags = {one_for_one, 10, 1},
     {ok, {SupFlags, ChildSpec}}.
