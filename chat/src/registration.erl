@@ -103,11 +103,14 @@ is_user_registered(User) ->
     Now = now(),
     case ets:lookup(?LATEST_REGISTERED_USED_TAB, User) of
         [] ->
+            logger:debug("registration:is_user_registered(~p) Not in ets latest used", [User]),
             case ets:lookup(?ALL_REGISTERED_TAB, User) of
                 [_Element] ->
                     ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
                     true;
-                _Other ->
+                Other ->
+                    logger:debug("registration:is_user_registered(~p) Not in ets all registered "
+                    ++ "found ", [Other]),
                     ets:insert(?LATEST_REGISTERED_USED_TAB, {User, false, Now}),
                     false
             end;
@@ -129,6 +132,7 @@ init(_Args) ->
     ets:new(?ALL_REGISTERED_TAB, [set, private, named_table]),
 
     ExistingRegisteredUsers = mysql_utils:get_all_users(),
+    logger:debug("registration:init() MySQL users ~p", [ExistingRegisteredUsers]),
     lists:foreach(
         fun({User, Password}) ->
             % logger:debug
@@ -166,6 +170,7 @@ handle_call({register, User, Password}, _From, State) ->
         false ->
             ets:insert(?LATEST_REGISTERED_ADDED_TAB, {User, Password, Now}),
             ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
+            ets:insert(?ALL_REGISTERED_TAB, {User, Password}),
             {reply, {true, ?REGISTRATION_COMPLETED}, State}
     end;
 
