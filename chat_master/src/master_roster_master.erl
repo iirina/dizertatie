@@ -1,7 +1,7 @@
-%% Keeps track of all roster_master processes (children of roster_master_supervisor)
+%% Keeps track of all master_roster_master processes (children of master_roster_master_supervisor)
 %% and redirects all requests to one of these processes (the one with the lowest load)
 
--module(roster_master).
+-module(master_roster_master).
 -behaviour(gen_server).
 
 %% API
@@ -24,7 +24,6 @@
     terminate/2
 ]).
 
-
 %% Internally used. Exported to stop warnings.
 -export([
     update_ets_tables/0
@@ -39,29 +38,29 @@
 %%%=================================================================================================
 %%% API
 %%%=================================================================================================
-%% Starts the roster_master server.
+%% Starts the master_roster_master server.
 start_link() ->
-    gen_server:start_link({local, roster_master}, roster_master, noargs, []).
+    gen_server:start_link({local, master_roster_master}, master_roster_master, noargs, []).
 
 add_friend(User1, User2) ->
-    gen_server:cast(roster_master, {add_friend, User1, User2}).
+    gen_server:cast(master_roster_master, {add_friend, User1, User2}).
 
 remove_friend(User1, User2) ->
-    logger:debug("roster_master:remove_friend() Remove friends ~p and ~p.", [User1, User2]).
+    logger:debug("master_roster_master:remove_friend() Remove friends ~p and ~p.", [User1, User2]).
 
 %% Gets a list of friends usernames.
 get_friends(User) ->
-    gen_server:call(roster_master, {get_friends, User}).
+    gen_server:call(master_roster_master, {get_friends, User}).
 
 %% Returns boolean.
 are_friends(_User1, _User2) ->
     true.
-    % logger:debug("roster_master:are_friends() Is ~p a friend of ~p? That is the question.",
+    % logger:debug("master_roster_master:are_friends() Is ~p a friend of ~p? That is the question.",
     %     [User1, User2]),
-    % gen_server:call(roster_master, {are_friends, User1, User2}).
+    % gen_server:call(master_roster_master, {are_friends, User1, User2}).
 
 add_worker_pid(Pid) ->
-    gen_server:cast(roster_master, {add_worker_pid, Pid}).
+    gen_server:cast(master_roster_master, {add_worker_pid, Pid}).
 
 %%%=================================================================================================
 %%% helper functions
@@ -70,12 +69,12 @@ start_workers(0) ->
     ok;
 
 start_workers(NrWorkers) ->
-    logger:debug("roster_master:start_workers() Starting new roster worker.."),
-    roster:start(),
+    logger:debug("master_roster_master:start_workers() Starting new roster worker.."),
+    master_roster:start(),
     start_workers(NrWorkers - 1).
 
 get_first_element_of_queue_and_add_it_to_rear(Queue) ->
-    logger:debug("roster_master:get_first_element_of_queue_and_add_it_to_rear ~p",
+    logger:debug("master_roster_master:get_first_element_of_queue_and_add_it_to_rear ~p",
         [queue:to_list(Queue)]),
     case queue:is_empty(Queue) of
         true ->
@@ -166,10 +165,10 @@ update_ets_tables() ->
 set_timers() ->
     case timer:send_interval(?TIME_TO_DROP_LATEST_ADDED_FRIENDS, update_ets_tables) of
         {ok, _DropTref} ->
-            logger:debug("roster_master:init() Timer set for drop_latest_added_friends");
+            logger:debug("master_roster_master:init() Timer set for drop_latest_added_friends");
         {error, DropError} ->
             logger:error(
-            "roster_master:init() Timer was not set for drop_latest_added_friends ~p",
+            "master_roster_master:init() Timer was not set for drop_latest_added_friends ~p",
                 [DropError])
     end.
 
@@ -179,7 +178,7 @@ set_timers() ->
 
 % The state is a queue of the PIDs of all roster workers.
 init(_Args) ->
-    logger:debug("roster_master:init()"),
+    logger:debug("master_roster_master:init()"),
 
     %% Create the ets tables that are used by the workers (notice the public property).
     ets:new(?LATEST_USED_FRIENDS_TAB,
@@ -201,63 +200,63 @@ init(_Args) ->
     {ok, #state{worker_pids = queue:new()}}.
 
 handle_call({are_friends, _User1, _User2}, _From, State) ->
-    logger:debug("roster_master:handle_call() are_friends"),
+    logger:debug("master_roster_master:handle_call() are_friends"),
     {reply, true, State};
 
 handle_call(Request, _From, State) ->
-    logger:debug("roster_master:handle_call() ~p ", [Request]),
+    logger:debug("master_roster_master:handle_call() ~p ", [Request]),
     case get_first_element_of_queue_and_add_it_to_rear(State#state.worker_pids) of
         {WorkerPid, UpdatedQueue} ->
-            % logger:debug("roster_master:handle_call() Redirecting Request ~p to PID ~p",
+            % logger:debug("master_roster_master:handle_call() Redirecting Request ~p to PID ~p",
             %     [Request, WorkerPid]),
             WorkerResponse = gen_server:call(WorkerPid, Request),
             {reply, WorkerResponse, #state{worker_pids = UpdatedQueue}};
         _Other ->
-            logger:debug("roster_master:handle_call() Could not find PID to redirect request ~p",
+            logger:debug("master_roster_master:handle_call() Could not find PID to redirect request ~p",
                 [Request]),
             {reply, unknown, State}
     end.
 
 handle_cast({add_worker_pid, Pid}, State) ->
-    logger:debug("roster_master:handle_cast() add_worker_pid ~p", [Pid]),
+    logger:debug("master_roster_master:handle_cast() add_worker_pid ~p", [Pid]),
     {noreply, #state{worker_pids = queue:in(Pid, State#state.worker_pids)}};
 
 handle_cast(Request, State) ->
-    logger:debug("roster_master:handle_cast() ~p", [Request]),
+    logger:debug("master_roster_master:handle_cast() ~p", [Request]),
     case get_first_element_of_queue_and_add_it_to_rear(State#state.worker_pids) of
         {WorkerPid, UpdatedQueue} ->
-            % logger:debug("roster_master:handle_cast() Redirecting Request ~p to PID ~p",
+            % logger:debug("master_roster_master:handle_cast() Redirecting Request ~p to PID ~p",
             %     [Request, WorkerPid]),
             gen_server:cast(WorkerPid, Request),
             {noreply, #state{worker_pids = UpdatedQueue}};
         _Other ->
-            logger:debug("roster_master:handle_cast() Could not find PID to redirect request ~p",
+            logger:debug("master_roster_master:handle_cast() Could not find PID to redirect request ~p",
                 [Request]),
             {noreply, State}
     end.
 
 handle_info(update_ets_tables, State) ->
-    spawn(roster_master, update_ets_tables, []),
+    spawn(master_roster_master, update_ets_tables, []),
     {noreply, State};
 
 handle_info(Request, State) ->
-    logger:debug("roster_master:handle_info() ~p", [Request]),
+    logger:debug("master_roster_master:handle_info() ~p", [Request]),
     case get_first_element_of_queue_and_add_it_to_rear(State#state.worker_pids) of
         {WorkerPid, UpdatedQueue} ->
-            % logger:debug("roster_master:handle_info() Redirecting Request ~p to PID ~p",
+            % logger:debug("master_roster_master:handle_info() Redirecting Request ~p to PID ~p",
             %     [Request, WorkerPid]),
             WorkerPid ! Request,
             {noreply, #state{worker_pids = UpdatedQueue}};
         _Other ->
-            logger:debug("roster_master:handle_info() Could not find PID to redirect request ~p",
+            logger:debug("master_roster_master:handle_info() Could not find PID to redirect request ~p",
                 [Request]),
             {noreply, State}
     end.
 
 % terminate is called if a handle_* call returns stop
-% roster_master is brutally killed by chat_supervisor on shutdown
+% master_roster_master is brutally killed by master_chat_supervisor on shutdown
 terminate(Reason, _State) ->
-	logger:info("roster_master:terminate() Terminating for reason ~p", [Reason]),
+	logger:info("master_roster_master:terminate() Terminating for reason ~p", [Reason]),
 	ok.
 
 code_change(_OldVsn, State, _Extra) ->

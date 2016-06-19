@@ -1,8 +1,8 @@
 %% Module used for auhtentication.
 %% The user must send a request [auth, {user Username}, {pass Password}]
-% This is supervised by chat_supervisor.
+% This is supervised by master_chat_supervisor.
 
--module(chat_auth).
+-module(master_chat_auth).
 
 %% API
 -export([
@@ -20,42 +20,42 @@
 %%% API functions
 %%%===================================================================
 handle_auth_packet(Request, GenServerPid) ->
-    logger:debug("chat_auth:handle_auth_packet(~p, ~p)", [Request, GenServerPid]),
+    logger:debug("master_chat_auth:handle_auth_packet(~p, ~p)", [Request, GenServerPid]),
     case get_type_of_action(Request) of
         {auth, Id, User} ->
-            case registration:is_registered(User) of
+            case master_registration:is_registered(User) of
                 true ->
                     %% For now we don't verify user and password.
                     %% We have to mark this user as connected, let the user now the
                     %% authentication was successful and notify the other chat users about
                     %% his presence.
-                    logger:debug("chat_auth:handle_auth() Identified user ~p.", [User]),
-                    courier:connected(User, GenServerPid),
+                    logger:debug("master_chat_auth:handle_auth() Identified user ~p.", [User]),
+                    master_courier:connected(User, GenServerPid),
                     gen_server:cast(GenServerPid, {set_user, User}),
                     gen_server:cast(GenServerPid, {message, Id ++ "," ++ ?AUTH_SUCCESSFUL}),
                     %% Informs all chat users about the newly connected user.
-                    courier:group_message(
+                    master_courier:group_message(
                         "server", User, chat_utils:format_notification(User, "connected")),
                     {user, User};
                 false ->
-                    logger:debug("chat_auth:handle_auth() User ~p not registered.", [User]),
+                    logger:debug("master_chat_auth:handle_auth() User ~p not registered.", [User]),
                     gen_server:cast(GenServerPid, {message, Id ++ "," ++ ?NOT_REGISTERED}),
                     authentication_failed
             end;
         {register, Id, User, Password} ->
-            case registration:register(User, Password) of
+            case master_registration:register(User, Password) of
                 {true, Message} ->
-                    courier:connected(User, GenServerPid),
+                    master_courier:connected(User, GenServerPid),
                     gen_server:cast(GenServerPid, {set_user, User}),
                     gen_server:cast(GenServerPid, {message, Id ++ "," ++ Message}),
-                    courier:group_message(
+                    master_courier:group_message(
                         "server", User, chat_utils:format_notification(User, "connected")),
-                    logger:debug("chat_auth:handle_auth() Registered user ~p.", [User]),
+                    logger:debug("master_chat_auth:handle_auth() Registered user ~p.", [User]),
                     {user, User};
                 {false, Message} ->
-                    logger:debug("chat_auth:handle_auth() Could not register user ~p.", [User]),
+                    logger:debug("master_chat_auth:handle_auth() Could not register user ~p.", [User]),
                     gen_server:cast(GenServerPid, {message, Id ++ "," ++ Message}),
-                    registration_faild
+                    master_registration_faild
             end;
         {id, Id} ->
             gen_server:cast(GenServerPid, {message, Id ++ "," ++ ?BAD_REQUEST});
@@ -78,47 +78,47 @@ get_id(StringRequest) ->
 
 
 get_type_of_action(StringRequest) ->
-    logger:debug("chat_auth:get_type_of_action(~p)", [StringRequest]),
+    logger:debug("master_chat_auth:get_type_of_action(~p)", [StringRequest]),
     Request = chat_utils:trim_string(StringRequest),
     case is_auth_request(StringRequest) of
         {user, Id, User} ->
             {auth, Id, User};
         false ->
-            case is_registration_request(StringRequest) of
+            case is_master_registration_request(StringRequest) of
                 {user, Id, User, Password} ->
                     {register, Id, User, Password};
                 false ->
                     get_id(Request)
-                    % logger:debug("chat_auth:get_type_of_action(~p) unrecognized.", [Request]),
+                    % logger:debug("master_chat_auth:get_type_of_action(~p) unrecognized.", [Request]),
                     % unknown
             end
     end.
 
 is_auth_request(Request) ->
     Tokens = string:tokens(Request, ","),
-    logger:debug("chat_auth:is_auth_request() Request ~p", [Request]),
+    logger:debug("master_chat_auth:is_auth_request() Request ~p", [Request]),
     Id = lists:nth(1, Tokens),
     AuthToken = lists:nth(2, Tokens),
     case string:equal(AuthToken, ?AUTH_TOKEN) of
         true ->
             User = lists:nth(3, Tokens),
             % Password = chat_utils:trim_string(lists:nth(4, Tokens)),
-            logger:debug("chat_auth:is_auth_request() User ~p", [User]),
+            logger:debug("master_chat_auth:is_auth_request() User ~p", [User]),
             {user, Id, User};
         false ->
             false
     end.
 
-is_registration_request(Request) ->
+is_master_registration_request(Request) ->
     Tokens = string:tokens(Request, ","),
     Id = lists:nth(1, Tokens),
-    logger:debug("chat_auth:is_auth_request() Request ~p", [Request]),
+    logger:debug("master_chat_auth:is_auth_request() Request ~p", [Request]),
     RegistrationToken = lists:nth(2, Tokens),
     case string:equal(RegistrationToken, ?REGISTRATION_TOKEN) of
         true ->
             User = lists:nth(3, Tokens),
             Password = chat_utils:trim_string(lists:nth(4, Tokens)),
-            logger:debug("chat_auth:is_registration_request() User ~p Password ~p", [User, Password]),
+            logger:debug("master_chat_auth:is_master_registration_request() User ~p Password ~p", [User, Password]),
             {user, Id, User, Password};
         false ->
             false

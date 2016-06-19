@@ -2,7 +2,7 @@
 %% The state of the gen_server is an identifier of an ets table that stores tuples:
 %% {User, Friend}
 %% where User will be the key used in the ets table.
--module(roster).
+-module(master_roster).
 -behaviour(gen_server).
 
 %% API
@@ -26,14 +26,14 @@
 %%%=================================================================================================
 %%% API
 %%%=================================================================================================
-%% Called by roster_master to start a new worker.
+%% Called by master_roster_master to start a new worker.
 start() ->
-    StartingResult = supervisor:start_child(roster_sup, []),
-    logger:debug("roster:start() ~p", [StartingResult]).
+    StartingResult = supervisor:start_child(master_roster_sup, []),
+    logger:debug("master_roster:start() ~p", [StartingResult]).
 
 start_link() ->
-    logger:debug("roster:start_link/0"),
-    gen_server:start_link(roster, no_args, []).
+    logger:debug("master_roster:start_link/0"),
+    gen_server:start_link(master_roster, no_args, []).
 
 %%%=================================================================================================
 %%% helper functions
@@ -69,8 +69,8 @@ are_users_friends(User1, User2) ->
 %%% gen_server callbacks
 %%%=================================================================================================
 init(_Args) ->
-    logger:debug("roster:init()"),
-    roster_master:add_worker_pid(self()),
+    logger:debug("master_roster:init()"),
+    master_roster_master:add_worker_pid(self()),
     {ok, []}.
 
 handle_call({get_friends, User}, _From, State) ->
@@ -80,7 +80,7 @@ handle_call({are_friends, User1, User2}, _From, State) ->
     {reply, are_users_friends(User1, User2), State};
 
 handle_call(OtherRequest, _From, State) ->
-    logger:error("roster:handle_call() Unknown cast request ~p", [OtherRequest]),
+    logger:error("master_roster:handle_call() Unknown cast request ~p", [OtherRequest]),
     {noreply, State}.
 
 handle_cast({add_friend, User1, User2}, State) ->
@@ -97,17 +97,17 @@ handle_cast({add_friend, User1, User2}, State) ->
     {noreply, State};
 
 handle_cast(OtherRequest, State) ->
-    logger:error("roster:handle_cast() Unknown cast request ~p", [OtherRequest]),
+    logger:error("master_roster:handle_cast() Unknown cast request ~p", [OtherRequest]),
     {noreply, State}.
 
 handle_info(Info, State) ->
-	logger:error("roster:handle_info() Unknown info ~p", [Info]),
+	logger:error("master_roster:handle_info() Unknown info ~p", [Info]),
 	{noreply, State}.
 
 % terminate is called if a handle_* call returns stop
-% roster is brutally killed by chat_supervisor on shutdown
+% roster is brutally killed by master_chat_supervisor on shutdown
 terminate(Reason, _State) ->
-	logger:info("roster:terminate() Terminating for reason ~p", [Reason]),
+	logger:info("master_roster:terminate() Terminating for reason ~p", [Reason]),
 	ok.
 
 code_change(_OldVsn, State, _Extra) ->

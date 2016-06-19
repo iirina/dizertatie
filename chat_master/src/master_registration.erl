@@ -1,6 +1,6 @@
 %% Keeps track of the registered users.
 
--module(registration).
+-module(master_registration).
 -behaviour(gen_server).
 
 %% API
@@ -25,17 +25,17 @@
 %%%=================================================================================================
 %%% API
 %%%=================================================================================================
-%% Starts the registration server. Called by its supervisor.
+%% Starts the master_registration server. Called by its supervisor.
 start_link() ->
-    gen_server:start_link({local, registration}, registration, noargs, []).
+    gen_server:start_link({local, master_registration}, master_registration, noargs, []).
 
 register(User, Password) ->
-    logger:debug("registration:register(~p, ~p)", [User, Password]),
-    gen_server:call(registration, {register, User, Password}).
+    logger:debug("master_registration:register(~p, ~p)", [User, Password]),
+    gen_server:call(master_registration, {register, User, Password}).
 
 is_registered(User) ->
-    logger:debug("registration:is_registered(~p)", [User]),
-    gen_server:call(registration, {is_registered, User}).
+    logger:debug("master_registration:is_registered(~p)", [User]),
+    gen_server:call(master_registration, {is_registered, User}).
 
 %%%=================================================================================================
 %%% Helper functions
@@ -43,7 +43,7 @@ is_registered(User) ->
 
 get_latest_registered_users_before('$end_of_table', Entries, _Timestamp) ->
     % logger:debug(
-    %     "registration:get_latest_registered_users_before $end_of_table entries: ~p", [Entries]),
+    %     "master_registration:get_latest_registered_users_before $end_of_table entries: ~p", [Entries]),
     Entries;
 
 get_latest_registered_users_before(Key, {StringEntries, ObjectList}, Timestamp) ->
@@ -113,7 +113,7 @@ is_user_registered(User) ->
             end;
         [{User, IsRegistered, _Timestamp}] ->
             logger:debug(
-                "registration:handle_call() is_registered User ~p ~p", [User, IsRegistered]),
+                "master_registration:handle_call() is_registered User ~p ~p", [User, IsRegistered]),
             ets:insert(?LATEST_REGISTERED_USED_TAB, {User, IsRegistered, Now}),
             IsRegistered
     end.
@@ -122,7 +122,7 @@ is_user_registered(User) ->
 %%% gen_server callbacks
 %%%=================================================================================================
 init(_Args) ->
-    logger:debug("registration:init()"),
+    logger:debug("master_registration:init()"),
     %% TODO see if needed to integrate the option {heir,Pid,HeirData} | {heir,none}
     ets:new(?LATEST_REGISTERED_USED_TAB, [set, private, named_table]),
     ets:new(?LATEST_REGISTERED_ADDED_TAB, [set, private, named_table]),
@@ -139,16 +139,16 @@ init(_Args) ->
     %% ALL_REGISTERED_TAB should be populated from mysql at the beginning
     case timer:send_interval(?TIME_TO_DROP_REGISTERED_USERS, drop_registered_users) of
         {ok, _DropTref} ->
-            logger:debug("registration:init() Timer set for drop_registered_users");
+            logger:debug("master_registration:init() Timer set for drop_registered_users");
         {error, DropError} ->
             logger:error(
-                "registration:init() Timer was not set for drop_registered_users ~p", [DropError])
+                "master_registration:init() Timer was not set for drop_registered_users ~p", [DropError])
     end,
     case timer:send_interval(?TIME_TO_UPDATE_LATEST_USED_TAB, update_latest_used_tab) of
         {ok, _UpdateTref} ->
-            logger:debug("registration:init() Timer set for update_latest_used_tab");
+            logger:debug("master_registration:init() Timer set for update_latest_used_tab");
         {error, UpdateError} ->
-            logger:error("registration:init() Timer was not set for update_latest_used_tab ~p",
+            logger:error("master_registration:init() Timer was not set for update_latest_used_tab ~p",
                 [UpdateError])
     end,
     {ok, []}.
@@ -158,7 +158,7 @@ handle_call({is_registered, User}, _From, State) ->
 
 handle_call({register, User, Password}, _From, State) ->
     Now = now(),
-    logger:debug("registration:handle_cast() register User ~p Password ~p", [User, Password]),
+    logger:debug("master_registration:handle_cast() register User ~p Password ~p", [User, Password]),
     case is_user_registered(User) of
         true ->
             logger:debug("register:handle_cast() register User ~p already used.", [User]),
@@ -170,11 +170,11 @@ handle_call({register, User, Password}, _From, State) ->
     end;
 
 handle_call(OtherRequest, _From, State) ->
-    logger:error("registration:handle_call() Unknown cast request ~p", [OtherRequest]),
+    logger:error("master_registration:handle_call() Unknown cast request ~p", [OtherRequest]),
     {noreply, State}.
 
 handle_cast(OtherRequest, State) ->
-    logger:error("registration:handle_cast() Unknown cast request ~p", [OtherRequest]),
+    logger:error("master_registration:handle_cast() Unknown cast request ~p", [OtherRequest]),
     {noreply, State}.
 
 handle_info(drop_registered_users, State) ->
@@ -184,20 +184,20 @@ handle_info(drop_registered_users, State) ->
     Empty = {"", []},
     case get_latest_registered_users_before(ets:first(?LATEST_REGISTERED_ADDED_TAB), Empty, Now) of
         {"", []} ->
-            % logger:debug("registration:handle_info() drop_registered_users No entries found.");
+            % logger:debug("master_registration:handle_info() drop_registered_users No entries found.");
             ok;
         {Entries, ObjectList} ->
-            % logger:debug("registration:handle_info() drop_registered_users ~p Entries", [Entries]),
+            % logger:debug("master_registration:handle_info() drop_registered_users ~p Entries", [Entries]),
             lists:foreach(
                 fun(Object) ->
                     ets:delete_object(?LATEST_REGISTERED_ADDED_TAB, Object),
                     mysql_utils:bulk_insert_into_user(Entries)
-                    % logger:debug("registration:handle_info() drop_registered_users, Deleted object:"
+                    % logger:debug("master_registration:handle_info() drop_registered_users, Deleted object:"
                     %     ++ " ~p from ets ~p", [Object, ?LATEST_REGISTERED_ADDED_TAB])
                 end,
                 ObjectList
             ),
-            logger:debug("registration:handle_info() drop_registered_users, Inserted into mysql")
+            logger:debug("master_registration:handle_info() drop_registered_users, Inserted into mysql")
     end,
     {noreply, State};
 
@@ -208,7 +208,7 @@ handle_info(update_latest_used_tab, State) ->
     lists:foreach(
         fun(Object) ->
             ets:delete_object(?LATEST_REGISTERED_USED_TAB, Object)
-            % logger:debug("registration:handle_info() update_latest_used_tab, Deleted object: ~p "
+            % logger:debug("master_registration:handle_info() update_latest_used_tab, Deleted object: ~p "
             % ++ "from ets ~p", [Object, ?LATEST_REGISTERED_USED_TAB])
         end,
         ObjToDelete
@@ -216,13 +216,13 @@ handle_info(update_latest_used_tab, State) ->
     {noreply, State};
 
 handle_info(Info, State) ->
-	logger:error("registration:handle_info() Unknown info ~p", [Info]),
+	logger:error("master_registration:handle_info() Unknown info ~p", [Info]),
 	{noreply, State}.
 
 % terminate is called if a handle_* call returns stop
-% registration is brutally killed by chat_supervisor on shutdown
+% master_registration is brutally killed by master_chat_supervisor on shutdown
 terminate(Reason, _State) ->
-	logger:info("registration:terminate() Terminating for reason ~p", [Reason]),
+	logger:info("master_registration:terminate() Terminating for reason ~p", [Reason]),
 	ok.
 
 code_change(_OldVsn, State, _Extra) ->

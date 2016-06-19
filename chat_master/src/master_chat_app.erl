@@ -1,4 +1,4 @@
--module(chat_app).
+-module(master_chat_app).
 
 -behaviour(application).
 
@@ -8,13 +8,13 @@
 ]).
 
 start(_Type, _StartArgs) ->
-    logger:debug("chat_app:start()"),
-    case chat_supervisor:start_link() of
+    logger:debug("master_chat_app:start()"),
+    case master_chat_supervisor:start_link() of
         {ok, Pid} ->
-            logger:debug("chat_app:start(): chat_supervisor started"),
+            logger:debug("master_chat_app:start(): master_chat_supervisor started"),
             {ok, Pid};
         Other ->
-            logger:debug("chat_app:start(): chat_supervisor DID NOT start due to ~w", [Other]),
+            logger:debug("master_chat_app:start(): master_chat_supervisor DID NOT start due to ~w", [Other]),
             {error, Other}
     end.
 

@@ -1,4 +1,4 @@
--module(storage).
+-module(master_storage).
 
 -export([
     load_users/0

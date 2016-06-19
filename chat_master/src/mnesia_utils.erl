@@ -3,19 +3,19 @@
 
 -record(friends, {user, friend}).
 
--record(courier_user_to_pid, {username, pid}).
+-record(master_courier_user_to_pid, {username, pid}).
 
 -export([
     mnesia_init/0,
     insert_user/2,
     insert_friendship/2,
-    insert_to_courier/2,
+    insert_to_master_courier/2,
     get_all_users/0,
     get_user/1,
     get_friends_for_user/1,
     are_mnesia_friends/2,
     get_pid_for_user/1,
-    remove_from_courier/2
+    remove_from_master_courier/2
 ]).
 
 mnesia_init() ->
@@ -25,8 +25,8 @@ mnesia_init() ->
     mnesia:create_table(friends,
                         [{attributes, record_info(fields, friends)}, {type, bag}]),
 
-    mnesia:create_table(courier_user_to_pid,
-                        [{attributes, record_info(fields, courier_user_to_pid)}]).
+    mnesia:create_table(master_courier_user_to_pid,
+                        [{attributes, record_info(fields, master_courier_user_to_pid)}]).
 
 insert_user(Username, Passowrd) ->
     insert_object(#user{username = Username, password = Passowrd}).
@@ -36,23 +36,23 @@ insert_friendship(User, Friend) ->
     insert_object(#friends{user = User, friend = Friend}).
     % ok.
 
-insert_to_courier(User, Pid) ->
-    insert_object(#courier_user_to_pid{username = User, pid = Pid}).
+insert_to_master_courier(User, Pid) ->
+    insert_object(#master_courier_user_to_pid{username = User, pid = Pid}).
     % ok.
 
 get_pid_for_user(User) ->
-    Result = mnesia:dirty_read(courier_user_to_pid, User),
+    Result = mnesia:dirty_read(master_courier_user_to_pid, User),
     logger:debug("mnesia_utils:get_pid_for_user(~p) ~p", [User, Result]),
     case Result of
-        [{courier_user_to_pid, _User, Pid}] ->
+        [{master_courier_user_to_pid, _User, Pid}] ->
             Pid;
         _Other ->
             no_pid
     end.
     % no_pid.
 
-remove_from_courier(User, Pid) ->
-    mnesia:dirty_delete_object({courier_user_to_pid, User, Pid}).
+remove_from_master_courier(User, Pid) ->
+    mnesia:dirty_delete_object({master_courier_user_to_pid, User, Pid}).
     % ok.
 
 get_user(Username) ->

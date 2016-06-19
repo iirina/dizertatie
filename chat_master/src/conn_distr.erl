@@ -12,6 +12,7 @@
 -define(DEFAULT_PORT, 5455).
 
 start() ->
+    pool:start(),
     SocketOpts = [{active, false}, binary, {packet, 0}],
     Port = ?DEFAULT_PORT,
     case gen_tcp:listen(Port, SocketOpts) of
