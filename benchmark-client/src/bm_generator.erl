@@ -34,10 +34,10 @@
 -define(MYSQL_PASSWORD, "parola").
 -define(MYSQL_DATABASE, "chat").
 
--define(GENERAL_NR, 5).
+-define(GENERAL_NR, 1000).
 
 -define(NR_USERS, ?GENERAL_NR).
--define(NR_FRIENDSHIP, ?GENERAL_NR).
+-define(NR_FRIENDSHIP, ?GENERAL_NR * 100).
 -define(NR_MESSAGES, ?GENERAL_NR).
 -define(NR_GROUP_MESSAGES, ?GENERAL_NR).
 -define(BATCH_SIZE, ?GENERAL_NR).
@@ -218,7 +218,7 @@ handle_cast(send_messages, State) ->
     random:seed(erlang:now()),
     NrBatches = ?NR_MESSAGES / ?BATCH_SIZE,
     send_batch_messages(NrBatches, State#state.pids, State#state.usernames),
-    % timer:apply_after(500, gen_server, cast, [bm_generator, send_group_messages]),
+    timer:apply_after(500, gen_server, cast, [bm_generator, send_group_messages]),
     {noreply, State};
 
 handle_cast(send_group_messages, State) ->

@@ -10,9 +10,8 @@
 -define(LATEST_USED_FRIENDS_TAB, latest_friends_tab).
 -define(LATEST_ADDED_TAB, latest_added_friends_tab).
 -define(ALLTIME_FRIENDS_TAB, alltime_friends_tab).
--define(TIME_TO_DROP_LATEST_ADDED_FRIENDS, 5 * 1000). %% 1 * 5 * 1000
--define(TIME_TO_UPDATE_LATEST_USED_FRIENDS, 5 * 1000). %% 5 * 5 * 1000
--define(TIME_TO_DUMP_MNESIA_FRIENDS, 5 * 1000).
+-define(TIME_TO_DROP_LATEST_ADDED_FRIENDS, 5 * 1000).
+-define(TIME_TO_UPDATE_LATEST_USED_FRIENDS, 3 * 1000). 
 
 %%%=================================================================================================
 %%% MySQL related macros
