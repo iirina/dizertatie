@@ -113,7 +113,7 @@ is_user_registered(User) ->
             end;
         [{User, IsRegistered, _Timestamp}] ->
             logger:debug(
-                "master_registration:handle_call() is_registered User ~p ~p", [User, IsRegistered]),
+                "master_registration:is_user_registered(~p) ~p", [User, IsRegistered]),
             ets:insert(?LATEST_REGISTERED_USED_TAB, {User, IsRegistered, Now}),
             IsRegistered
     end.
@@ -154,6 +154,8 @@ init(_Args) ->
     {ok, []}.
 
 handle_call({is_registered, User}, _From, State) ->
+    IsRegistered = is_user_registered(User),
+    logger:debug("master_registration:handle_call() is_registered ~p: ~p", [User, IsRegistered]),
     {reply, is_user_registered(User), State};
 
 handle_call({register, User, Password}, _From, State) ->

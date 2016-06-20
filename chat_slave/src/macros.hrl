@@ -5,7 +5,13 @@
 
 -define(DEFAULT_MASTER_PORT, 5455).
 -define(DEFAULT_SLAVE_PORT, 5400).
--define(NODE_NAME, chat_slave).
+
+-define(SLAVE_NODE_NAME, chat_slave).
+-define(MASTER_NODE_NAME, chat_master).
+
+-define(MASTER_HOST, "192.168.178.28").
+
+-define(MASTER_NODE, atom_to_list(?MASTER_NODE_NAME) ++ "@" ++ ?MASTER_HOST).
 
 %%%=================================================================================================
 %%% roster related macros

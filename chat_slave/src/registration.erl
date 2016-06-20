@@ -99,7 +99,7 @@ get_latest_used_before(Key, ObjectList, Timestamp) ->
 seconds_ago({Macro, Sec, Micro}) ->
     {Macro, Sec - 10, Micro}.
 
-is_user_registered(User) ->
+is_registered_on_node(User) ->
     Now = now(),
     case ets:lookup(?LATEST_REGISTERED_USED_TAB, User) of
         [] ->
@@ -112,9 +112,35 @@ is_user_registered(User) ->
                     false
             end;
         [{User, IsRegistered, _Timestamp}] ->
-            logger:debug(
-                "registration:handle_call() is_registered User ~p ~p", [User, IsRegistered]),
+            logger:debug("registration:is_registered_on_node() is_registered User ~p ~p",
+                    [User, IsRegistered]),
             ets:insert(?LATEST_REGISTERED_USED_TAB, {User, IsRegistered, Now}),
+            IsRegistered
+    end.
+
+is_user_registered(User) ->
+    case is_registered_on_node(User) of
+        true ->
+            logger:debug(
+                "registration:is_user_registered(~p) is registered on current node", [User]),
+            true;
+        false ->
+            MasterNode = list_to_atom(?MASTER_NODE),
+            ServerRef = {master_registration, MasterNode},
+            Request = {is_registered, User},
+            IsRegistered = gen_server:call(ServerRef, Request),
+            logger:debug("registration:is_user_registered(~p) is registered on MASTER node: ~p",
+                [User, IsRegistered]),
+            Now = now(),
+            ets:insert(?LATEST_REGISTERED_USED_TAB, {User, IsRegistered, Now}),
+            % logger:debug("registration:is_user_registered")
+            case IsRegistered of
+                false ->
+                    ok;
+                true ->
+                    ets:insert(?LATEST_REGISTERED_ADDED_TAB, {User, "password", Now}),
+                    ets:insert(?ALL_REGISTERED_TAB, {User, "password"})
+            end,
             IsRegistered
     end.
 
