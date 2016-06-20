@@ -9,10 +9,14 @@
     send_addr_to_socket/1
 ]).
 
--define(DEFAULT_PORT, 5455).
+-include("macros.hrl").
 
 start() ->
-    pool:start(),
+    NodeCookie = erlang:get_cookie(),
+    Args = "-setcookie " ++ atom_to_list(NodeCookie),
+    Nodes = pool:start(?NODE_NAME, Args),
+    logger:debug("conn_distr:start Nodes = ~p", [Nodes]),
+    % logger:debug("conn_distr:start() Nodes ~p", [Nodes]),
     SocketOpts = [{active, false}, binary, {packet, 0}],
     Port = ?DEFAULT_PORT,
     case gen_tcp:listen(Port, SocketOpts) of
@@ -30,7 +34,11 @@ init(ListenSocket) ->
 
 get_addr() ->
     % TODO: use OTP pool to retrieve node
-    "Connect to localhost:5455\n".
+    Node = pool:get_node(),
+    NodeName = atom_to_list(Node),
+    Tokens = string:tokens(NodeName, "@"),
+    Host = lists:nth(2, Tokens),
+    "new_addr," ++ Host ++  ":" ++ integer_to_list(?DEFAULT_PORT) ++ "\n".
 
 send_addr_to_socket(Socket) ->
     Addr = get_addr(),
