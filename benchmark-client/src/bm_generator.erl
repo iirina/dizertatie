@@ -26,7 +26,6 @@
     terminate/2
 ]).
 
--define(DEFAULT_PORT, 5455).
 
 -define(MYSQL_ID, "1234").
 -define(MYSQL_HOST, "localhost").

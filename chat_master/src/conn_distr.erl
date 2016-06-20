@@ -20,10 +20,11 @@ start() ->
     %% We want to start the chat_slave application at the remote node
     lists:foreach(
         fun(Node) ->
-            spawn_link(Node, application, start, [p1_mysql]),
+            R1 = spawn_link(Node, application, start, [p1_mysql]),
             %% Waiting for p1_mysql to start, as it must start before chat
-            timer:sleep(1000),
-            spawn_link(Node, application, start, [chat])
+            timer:sleep(2000),
+            R2 = spawn_link(Node, application, start, [chat]),
+            logger:debug("conn_distr:start() mysql ~p chat ~p", [R1, R2])
         end,
         Nodes),
 
