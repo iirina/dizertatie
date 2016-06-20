@@ -3,6 +3,9 @@
 
 -define(STORAGE, ?MYSQL).
 
+-define(DEFAULT_MASTER_PORT, 5455).
+-define(DEFAULT_SLAVE_PORT, 5400).
+-define(NODE_NAME, chat_slave).
 
 %%%=================================================================================================
 %%% roster related macros
@@ -11,7 +14,7 @@
 -define(LATEST_ADDED_TAB, latest_added_friends_tab).
 -define(ALLTIME_FRIENDS_TAB, alltime_friends_tab).
 -define(TIME_TO_DROP_LATEST_ADDED_FRIENDS, 5 * 1000).
--define(TIME_TO_UPDATE_LATEST_USED_FRIENDS, 3 * 1000). 
+-define(TIME_TO_UPDATE_LATEST_USED_FRIENDS, 3 * 1000).
 
 %%%=================================================================================================
 %%% MySQL related macros
@@ -28,7 +31,7 @@
 -define(INSERT_USERS_INTO_MYSQL, "insert into user values ").
 
 %%%=================================================================================================
-%%% courier related macros
+%%% master_courier related macros
 %%%=================================================================================================
 -define(MESSAGE_SENT, "message_sent").
 -define(GROUP_MESSAGE_SENT, "group_message_sent").
@@ -42,13 +45,13 @@
 -define(TIME_TO_UPDATE_COURIER_ETS_TABLES, 5 * 1000).
 
 %%%=================================================================================================
-%%% registration related macros
+%%% master_registration related macros
 %%%=================================================================================================
 -define(LATEST_REGISTERED_USED_TAB, latest_registered_used_tab).
 -define(LATEST_REGISTERED_ADDED_TAB, latest_registered_added_tab).
 -define(ALL_REGISTERED_TAB, all_registered).
 -define(USER_TAKEN, "user_taken").
--define(REGISTRATION_COMPLETED, "registration_completed").
+-define(REGISTRATION_COMPLETED, "master_registration_completed").
 
 %% Time expressed in milliseconds.
 -define(TIME_TO_DROP_REGISTERED_USERS, 5 * 1000). %% 1 * 5 * 1000

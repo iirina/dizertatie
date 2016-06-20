@@ -6,11 +6,11 @@
 
 -export([init/1]).
 
--define(DEFAULT_PORT, 5455).
+-include("macros.hrl").
 
 start() ->
     SocketOpts = [{active, false}, binary, {packet, 0}],
-    Port = ?DEFAULT_PORT,
+    Port = ?DEFAULT_SLAVE_PORT,
     case gen_tcp:listen(Port, SocketOpts) of
         {ok, ListenSocket} ->
             logger:info("Server listening on port ~p", [Port]),

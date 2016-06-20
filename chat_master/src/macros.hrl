@@ -3,7 +3,8 @@
 
 -define(STORAGE, ?MYSQL).
 
--define(DEFAULT_PORT, 5455).
+-define(DEFAULT_MASTER_PORT, 5455).
+-define(DEFAULT_SLAVE_PORT, 5400).
 -define(NODE_NAME, chat_slave).
 
 %%%=================================================================================================
@@ -41,7 +42,7 @@
 -define(LATEST_CONNECTED_USERS, latest_connected_users).
 -define(LATEST_ACTIVE_USERS, latest_active_users).
 -define(ALL_CONNECTED_USERS, all_connected_users).
--define(TIME_TO_UPDATE_master_courier_ETS_TABLES, 5 * 1000).
+-define(TIME_TO_UPDATE_COURIER_ETS_TABLES, 5 * 1000).
 
 %%%=================================================================================================
 %%% master_registration related macros

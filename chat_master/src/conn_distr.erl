@@ -16,9 +16,19 @@ start() ->
     Args = "-setcookie " ++ atom_to_list(NodeCookie),
     Nodes = pool:start(?NODE_NAME, Args),
     logger:debug("conn_distr:start Nodes = ~p", [Nodes]),
-    % logger:debug("conn_distr:start() Nodes ~p", [Nodes]),
+
+    %% We want to start the chat_slave application at the remote node
+    lists:foreach(
+        fun(Node) ->
+            spawn_link(Node, application, start, [p1_mysql]),
+            %% Waiting for p1_mysql to start, as it must start before chat
+            timer:sleep(1000),
+            spawn_link(Node, application, start, [chat])
+        end,
+        Nodes),
+
     SocketOpts = [{active, false}, binary, {packet, 0}],
-    Port = ?DEFAULT_PORT,
+    Port = ?DEFAULT_MASTER_PORT,
     case gen_tcp:listen(Port, SocketOpts) of
         {ok, ListenSocket} ->
             logger:info("Server listening on port ~p", [Port]),
@@ -38,7 +48,7 @@ get_addr() ->
     NodeName = atom_to_list(Node),
     Tokens = string:tokens(NodeName, "@"),
     Host = lists:nth(2, Tokens),
-    "new_addr," ++ Host ++  ":" ++ integer_to_list(?DEFAULT_PORT) ++ "\n".
+    "new_addr," ++ Host ++  ":" ++ integer_to_list(?DEFAULT_SLAVE_PORT) ++ "\n".
 
 send_addr_to_socket(Socket) ->
     Addr = get_addr(),

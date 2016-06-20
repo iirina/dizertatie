@@ -106,7 +106,7 @@ init(_Args) ->
     ets:new(?LATEST_CONNECTED_USERS, [set, private, named_table]),
     ets:new(?LATEST_ACTIVE_USERS, [set, private, named_table]),
     ets:new(?ALL_CONNECTED_USERS, [set, private, named_table]),
-    case timer:send_interval(?TIME_TO_UPDATE_master_courier_ETS_TABLES, update_latest_ets_table) of
+    case timer:send_interval(?TIME_TO_UPDATE_COURIER_ETS_TABLES, update_latest_ets_table) of
         {ok, _Tref} ->
             logger:debug("master_courier:init() Timer set for update_latest_ets_table");
         {error, Error} ->
