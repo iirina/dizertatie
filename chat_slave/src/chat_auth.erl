@@ -34,7 +34,7 @@ handle_auth_packet(Request, GenServerPid) ->
                     gen_server:cast(GenServerPid, {set_user, User}),
                     gen_server:cast(GenServerPid, {message, Id ++ "," ++ ?AUTH_SUCCESSFUL}),
                     %% Informs all chat users about the newly connected user.
-                    courier:group_message(
+                    courier:group_message(GenServerPid,
                         "server", User, chat_utils:format_notification(User, "connected")),
                     {user, User};
                 false ->
@@ -48,7 +48,7 @@ handle_auth_packet(Request, GenServerPid) ->
                     courier:connected(User, GenServerPid),
                     gen_server:cast(GenServerPid, {set_user, User}),
                     gen_server:cast(GenServerPid, {message, Id ++ "," ++ Message}),
-                    courier:group_message(
+                    courier:group_message(GenServerPid,
                         "server", User, chat_utils:format_notification(User, "connected")),
                     logger:debug("chat_auth:handle_auth() Registered user ~p.", [User]),
                     {user, User};

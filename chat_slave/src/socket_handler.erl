@@ -99,10 +99,12 @@ handle_packet(Packet, User, GenServerPid) ->
     case get_action_type(Packet) of
         {group_message, Id, Message} ->
             logger:debug("socket_handler:handle_packet() Got action group_message id ~p.", [Id]),
-            courier:group_message(Id, User, chat_utils:format_message(User, Message, ?GROUP_MESSAGE_TOKEN));
+            courier:group_message(GenServerPid, Id, User,
+                chat_utils:format_message(User, Message, ?GROUP_MESSAGE_TOKEN));
         {chat, Id, To, Message} ->
             logger:debug("socket_handler:handle_packet() Got action chat."),
-            courier:chat(Id, User, To, chat_utils:format_message(User, Message, ?CHAT_TOKEN));
+            courier:chat(
+                GenServerPid, Id, User, To, chat_utils:format_message(User, Message, ?CHAT_TOKEN));
         {get_friends, Id} ->
             logger:debug("socket_handler:handle_packet() Got action get_friends."),
             {friends_list, FriendsList} = roster_master:get_friends(User),
@@ -241,7 +243,7 @@ terminate(Reason, State) ->
 	{Socket, Name} = State,
 	inet:close(Socket),
 	chat_utils:log_message(Name, "terminating, pid=~w, reason=~w", [self(), Reason]),
-	courier:group_message("server", "server", chat_utils:format_notification(Name,"disconnected")),
+	courier:group_message(self(), "server", "server", chat_utils:format_notification(Name,"disconnected")),
 	courier:disconnected(Name),
 	ok.
 
