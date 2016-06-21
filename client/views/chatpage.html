@@ -1,0 +1,185 @@
+<script type="text/javascript">
+var userlist = "";
+var activeChat;
+var messages = {};
+function addUser(username) {
+  $.ajax({url: 'usertemplate.html', 
+          success: function(html_data) {
+                      var newFriend = html_data.split("$user$").join(username);
+                      userlist = userlist + newFriend;
+                      $("#friendslist").html(userlist);
+                  }
+        });
+}
+
+function addMessage(username, message, timestamp, own) {
+  var urlrequest;
+  var author;
+  if (own) {
+    urlrequest = 'messagetemplateown.html';
+    author = user;
+  } else {
+    urlrequest = 'messagetemplate.html';
+    author = username;
+  }
+  $.ajax({url: urlrequest, 
+          success: function(html_data) {
+                      var newMessage = html_data.split("$message$").join(message);
+                      newMessage = newMessage.split("$user$").join(author);
+                      newMessage = newMessage.split("$time$").join(timestamp);
+                      if (messages[username] === undefined) {
+                          messages[username] = newMessage;
+                      } else {
+                          var str = messages[username];
+                          var lastUsername = str.substring(str.lastIndexOf('<strong class="primary-font">')+29,str.lastIndexOf('</strong>'));
+                          if (author === lastUsername) {
+                            str = str.substring(0,str.lastIndexOf('</div >')) + '<br>' + message + '</div >\n  </div>\n</li>';
+                            messages[username] = str.substring(0,str.lastIndexOf('</span>')+7) + timestamp + str.substring(str.lastIndexOf('</small>'));
+                          } else {
+                            messages[username] = str + newMessage;
+                          }
+                      }
+                      var out = document.getElementById("bodyofchat");
+                      var isScrolledToBottom = out.scrollHeight - out.clientHeight <= out.scrollTop + 1;
+                      if (activeChat == username) {
+                          $("#messages").html(messages[username]);
+                      }
+                      
+                      if(isScrolledToBottom) {
+                        out.scrollTop = out.scrollHeight - out.clientHeight;
+                      }
+                  }
+        });
+}
+function openchat(username) {
+  var oldActive = activeChat;
+  activeChat = username;
+  if (messages[username] === undefined) {
+    $("#messages").html("");
+  } else {
+    $("#messages").html(messages[username]);
+  }
+  $("#chatfriend").html(username);
+  $("#user_"+username).addClass("active");
+  $("#user_"+oldActive).removeClass("active");
+  var out = document.getElementById("bodyofchat");
+  out.scrollTop = out.scrollHeight - out.clientHeight;
+}
+function send() {
+    if(! ($("#message_to_send").val() === undefined || $("#message_to_send").val() === "")) {
+      var out = document.getElementById("bodyofchat");
+      out.scrollTop = out.scrollHeight - out.clientHeight;
+      addMessage(activeChat, $("#message_to_send").val(), new Date().toTimeString().split(' ')[0], true);
+      $.ajax('ajax?command=chat&params='+user+','+activeChat+','+$("#message_to_send").val());
+      $("#message_to_send").val(undefined);
+    }
+}
+$("#message_to_send").keyup(function(event){
+    if(event.keyCode == 13){
+        send();
+    }
+});
+function friendrequest() {
+  $.ajax('ajax?command=add_friend&params='+user+','+$("#user_friend_request").val());
+}
+function signout() {
+  messages = {};
+  activeChat = undefined;
+  userlist = "";
+  $.ajax('signout?user='+user);
+  $("#thechat").load('startpage.html');
+}
+function accept(username) {
+  addUser(username);
+  $.ajax('ajax?command=accept_friend_request&params='+user+','+username);
+}
+function reject(username) {
+  $.ajax('ajax?command=reject_friend_request&params='+user+','+username);
+}
+function triggerFriendRequest(username) {
+  $.ajax({url: 'userrequestmodaltemplate.html', 
+          success: function(html_data) {
+                      var modalBody = html_data.split("$username$").join(username);
+                      $("#accept_friend_request").html(modalBody);
+                      $('#accept_friend_request').modal('show');
+                  }
+        });
+}
+function triggerFriendsListUpdate() {
+  $("#signedinuser").html(user);
+  $.ajax('ajax?command=get_friends&params='+user);
+}
+</script>
+<div class = "container">
+<div class="row fill">
+<div class="col-md-8 fill">
+
+        <div class="panel panel-primary">
+            <div class="panel-heading">
+                <span class="glyphicon glyphicon-comment"></span> Chat with <span id = "chatfriend"></span>
+                <div class="btn-group pull-right">
+                    <button type="button" class="btn btn-default btn-xs dropdown-toggle" data-toggle="dropdown">
+                      <span id = "signedinuser"> </span>  <span class="glyphicon glyphicon-chevron-down"></span>
+                    </button>
+                    <ul class="dropdown-menu slidedown">
+                      <li><a href="#"  data-toggle="modal" data-target="#send_friend_request"><span class="glyphicon glyphicon-plus"></span>
+                          Add Friend</a></li>
+                        <li class="divider"></li>
+                        <li><a href="#" onclick="javascript:signout()"><span class="glyphicon glyphicon-off"></span>
+                            Sign Out</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div id="bodyofchat" class="panel-body chatbody">
+                <ul class="chat media-list" id="messages">
+
+                </ul>
+            </div>
+            <div class="panel-footer">
+                <div class="input-group">
+                    <input id="message_to_send" type="text" class="form-control input-sm" placeholder="Type your message here...">
+                    <span class="input-group-btn">
+                        <button class="btn btn-warning btn-sm" id="btn-chat" onclick="javascript:send()">
+                            Send</button>
+                    </span>
+                </div>
+            </div>
+        </div>
+      </div>
+<div class="col-md-3 fill">
+      <div class="panel panel-primary">
+        <div class="panel-heading">
+           ONLINE USERS
+        </div>
+        <div class="panel-body listbody">
+          <ul class="media-list nav nav-pills nav-stacked" id="friendslist">
+
+
+          </ul>
+        </div>
+        </div>
+
+</div>
+</div>
+</div>
+    <!-- Modal accept or reject friend request-->
+<div id="accept_friend_request" class="modal fade" role="dialog"></div>
+    <!-- Modal friend request-->
+<div id="send_friend_request" class="modal fade" role="dialog">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+        <h4 class="modal-title">Send a friend request to a user.</h4>
+      </div>
+      <div class="modal-body">
+        <p>Enter a user to send a friend request.</p>
+        <input id="user_friend_request" type="text" class="form-control input-sm" placeholder="Type username here...">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal" onclick="javascript:friendrequest()">Send</button>
+      </div>
+    </div>
+
+  </div>
+</div>

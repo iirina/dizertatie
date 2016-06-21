@@ -1,0 +1,129 @@
+<html>
+
+<link href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" rel="stylesheet">
+<style>
+.fill {
+  height: 100vh;
+}
+.chatbody {
+  height: 84.6vh;
+  max-height:84.6vh;
+  overflow-y:auto;
+}
+.listbody {
+  height: 90vh;
+}
+.bubble
+{
+position: relative;
+padding: 10px;
+background: #dddddd;
+-webkit-border-radius: 10px;
+-moz-border-radius: 10px;
+border-radius: 10px;
+}
+.bubble:after
+{
+content: '';
+position: absolute;
+border-style: solid;
+border-width: 0 13px 14px;
+border-color: #dddddd transparent;
+display: block;
+width: 0;
+z-index: 1;
+top: -14px;
+left: 14px;
+}
+.babble
+{
+position: relative;
+padding: 10px;
+background: #f0ad4e;
+color:#ffffff;
+-webkit-border-radius: 10px;
+-moz-border-radius: 10px;
+border-radius: 10px;
+}
+.babble:after
+{
+content: '';
+position: absolute;
+border-style: solid;
+border-width: 0 13px 14px;
+border-color: #f0ad4e transparent;
+display: block;
+width: 0;
+z-index: 1;
+top: -14px;
+left: 14px;
+}
+</style>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+<!-- Include all compiled plugins (below), or include individual files as needed -->
+<script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+<script type="text/javascript">
+var user;
+$(document).ready(function() {
+  $("#thechat").load("startpage.html", function( response, status, xhr ) {
+  if ( status == "error" ) {
+    var msg = "Sorry but there was an error: ";
+    alert( msg + xhr.status + " " + xhr.statusText );
+  }
+});
+});
+setInterval(function(){
+  $.ajax({ url : 'get_updates?username='+user,
+      type: 'GET',
+      success : function(data) {
+        var lines = data.replace(/\r?\n/g, "").toString().split('&');
+        for (i in lines) {
+          var msg = lines[i];
+          if (msg.indexOf('registration_completed') > -1 || msg.indexOf('authentication_successful') > -1) {
+              $("#thechat").load("chatpage.html", function() {
+                triggerFriendsListUpdate();
+              });
+          } else if (msg.indexOf('not_registered') > -1) {
+            //x,not_registered
+            userOrPassIncorrect();
+          } else if (msg.indexOf('user_taken') > -1) {
+            //x,user_taken
+            usernameTaken();
+          } else if (msg.indexOf('wants to be your friend') > -1) {
+            //user wants to be your friend.
+            var username = msg.split(' ')[0];
+            triggerFriendRequest(username);
+          } else if (msg.indexOf('accepted your friend request') > -1) {
+            //user accepted your friend request.
+            var username = msg.split(' ')[0];
+            addUser(username);
+          } else if (msg.indexOf('rejected your friend request') > -1) {
+            //user rejected your friend request.
+          } else if (msg.indexOf('(chat)>') > -1) {
+            //timestamp user (chat)> mesaj
+            var timestamp = msg.split(' ')[0];
+            var username = msg.split(' ')[1];
+            var message = msg.split('(chat)>')[1];
+            addMessage(username, message, timestamp, false);
+          } else if (msg.indexOf('(group)>') > -1) {
+            //timestamp user (group)> mesaj
+          } else if (msg.indexOf('friends:') > -1) {
+            //x,friends:user,user,user
+            var friends = msg.split(':')[1].split(',');
+            for (j in friends) {
+              if(friends[j] === undefined || friends[j] === "") {
+                return;
+              }
+              addUser(friends[j]);
+            }
+          }
+          }
+        }
+      })
+}, 3000);
+</script>
+
+
+<body id = "thechat">
+</body>
+</html>

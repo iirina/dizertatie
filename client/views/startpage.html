@@ -1,0 +1,49 @@
+<script type="text/javascript">
+function register() {
+  $("#error_message").html('');
+  user = $('#username').val();
+  $.ajax('ajax?command=register&params=' + $('#username').val() + ',' + $('#password').val());
+}
+function signin() {
+  $("#error_message").html('');
+  user = $('#username').val();
+  $.ajax('ajax?command=auth&params=' + $('#username').val() + ',' + $('#password').val());
+}
+function usernameTaken() {
+  $("#error_message").html('Unfortunately, the username you requested is already taken. Please choose another username.');
+}
+function userOrPassIncorrect() {
+  $("#error_message").html('The username and/or password you entered do not match any user in our database. Please try again or register to create a new account.');
+}
+$("#password").keyup(function(event){
+    if(event.keyCode == 13){
+        signin();
+    }
+});
+</script>
+<div class="container">
+    <div class="row">
+        <div class="col-sm-6 col-md-4 col-md-offset-4">
+            <h2 class="text-center login-title">Sign in for the most awesome chat</h2>
+            <br><br>
+            <div class="account-wall">
+                <div class="form-signin">
+                <input id="username" type="text" class="form-control" placeholder="Username" required autofocus>
+                <br>
+                <input id="password" type="password" class="form-control" placeholder="Password" required>
+                <br>
+                <div class="btn-group pull-right">
+                    &nbsp;
+                <button class="btn btn-lg btn-primary btn-lg" onclick="javascript:signin()">
+                    Sign in</button>
+                    &nbsp;
+                <button class="btn btn-lg btn-primary btn-lg" onclick="javascript:register()">
+                    Register</button>
+                </div>
+                <br>
+                <div id="error_message" style="color:red;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
