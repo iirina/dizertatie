@@ -13,8 +13,8 @@
     start_link/0,
     connected/2,
     disconnected/1,
-    group_message/3,
-    chat/4,
+    group_message/4,
+    chat/5,
     server_msg/2,
     get_pid_of_user/1
 ]).
@@ -57,11 +57,12 @@ connected(Name, SocketServerPid) ->
 disconnected(User) ->
     gen_server:call(master_courier, {disconnected, User}).
 
-group_message(MsgId, From, Msg) ->
-    gen_server:call(master_courier, {group_msg, MsgId, From, lists:flatten(Msg)}).
+group_message(FromUserPid, MsgId, From, Msg) ->
+    gen_server:call(master_courier, {group_msg, FromUserPid, MsgId, From, lists:flatten(Msg)}).
 
-chat(MsgId, FromUser, ToUser, Msg) ->
-    gen_server:cast(master_courier, {chat, MsgId, FromUser, ToUser, lists:flatten(Msg)}).
+chat(FromUserPid, MsgId, FromUser, ToUser, Msg) ->
+    gen_server:cast(
+        master_courier, {chat, FromUserPid, MsgId, FromUser, ToUser, lists:flatten(Msg)}).
 
 %% Sends a message from the server.
 server_msg(ToUser, Msg) ->
@@ -270,12 +271,12 @@ handle_call({disconnected, User}, {FromPid, _FromTag}, State) ->
     ets:delete(?LATEST_ACTIVE_USERS, User),
     {reply, ok, State};
 
-handle_call({group_msg, MsgId, FromUser, Msg}, {FromUserPid, _Tag}, State) ->
+handle_call({group_msg, FromUserPid, MsgId, FromUser, Msg}, _From, State) ->
     % handle_send_group_msg()
     spawn(master_courier, handle_send_group_msg, [FromUser, FromUserPid, Msg, MsgId]),
     {reply, ok, State};
 
-handle_call({chat, MsgId, FromUser, ToUser, Msg}, {FromUserPid, _Tag}, State) ->
+handle_call({chat, FromUserPid, MsgId, FromUser, ToUser, Msg}, _From, State) ->
     % handle_chat()
     spawn(master_courier, handle_chat, [FromUser, FromUserPid, ToUser, Msg, MsgId]),
     {reply, ok, State};
