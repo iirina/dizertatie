@@ -11,7 +11,7 @@
 
 -define(MASTER_HOST, "192.168.178.28").
 
--define(MASTER_NODE, atom_to_list(?MASTER_NODE_NAME) ++ "@" ++ ?MASTER_HOST).
+-define(MASTER_NODE, 'chat_master@192.168.178.28').
 
 %%%=================================================================================================
 %%% roster related macros

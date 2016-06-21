@@ -29,7 +29,9 @@
 ]).
 
 -export([
-    update_latest_ets_table/0
+    update_latest_ets_table/0,
+    handle_send_group_msg/4,
+    handle_chat/5
 ]).
 
 % -include("mysql_utils.hrl").
@@ -54,10 +56,10 @@ disconnected(User) ->
     gen_server:call(courier, {disconnected, User}).
 
 group_message(MsgId, From, Msg) ->
-    gen_server:cast(courier, {group_msg, MsgId, From, lists:flatten(Msg)}).
+    gen_server:call(courier, {group_msg, MsgId, From, lists:flatten(Msg)}).
 
 chat(MsgId, FromUser, ToUser, Msg) ->
-    gen_server:cast(courier, {chat, MsgId, FromUser, ToUser, lists:flatten(Msg)}).
+    gen_server:call(courier, {chat, MsgId, FromUser, ToUser, lists:flatten(Msg)}).
 
 %% Sends a message from the server.
 server_msg(ToUser, Msg) ->
@@ -98,42 +100,14 @@ update_latest_ets_table() ->
     remove_from_tabel(?LATEST_CONNECTED_USERS, LatestConnected),
     remove_from_tabel(?LATEST_ACTIVE_USERS, LatestActive).
 
-%%%=================================================================================================
-%%% gen_server callbacks
-%%%=================================================================================================
-init(_Args) ->
-    % {User, Pid, Timestamp}
-    ets:new(?LATEST_CONNECTED_USERS, [set, private, named_table]),
-    ets:new(?LATEST_ACTIVE_USERS, [set, private, named_table]),
-    ets:new(?ALL_CONNECTED_USERS, [set, private, named_table]),
-    case timer:send_interval(?TIME_TO_UPDATE_COURIER_ETS_TABLES, update_latest_ets_table) of
-        {ok, _Tref} ->
-            logger:debug("courier:init() Timer set for update_latest_ets_table");
-        {error, Error} ->
-            logger:error("courieri:init() Timer was not set for update_latest_ets_table ~p",
-                [Error])
-    end,
-	{ok, []}.
-
-handle_call({disconnected, User}, {FromPid, _FromTag}, State) ->
-    logger:info("courier:disconnected() User ~p disconnected (PID = ~p)", [User, FromPid]),
-    ets:delete(?ALL_CONNECTED_USERS, User),
-    ets:delete(?LATEST_CONNECTED_USERS, User),
-    ets:delete(?LATEST_ACTIVE_USERS, User),
-    {reply, ok, State};
-
-handle_call(Request, From, State) ->
-    logger:error("courier:handle_call(): Unknown request ~p from PID ~p", [Request, From]),
-    {noreply, State}.
-
-get_pid(User) ->
+get_pid_on_current_node(User) ->
     Now = now(),
-    logger:debug("courier:get_pid(~p)", [User]),
+    logger:debug("courier:get_pid_on_current_node(~p)", [User]),
     Pid = case ets:lookup(?LATEST_ACTIVE_USERS, User) of
         [{_User, UserPid, _Timestamp}] ->
             UserPid;
         Other ->
-            logger:debug("courier:get_pid(~p) Not latest active user, found ~p in ets, will search "
+            logger:debug("courier:get_pid_on_current_node(~p) Not latest active user, found ~p in ets, will search "
                 ++ "all connected users", [User, Other]),
             case ets:lookup(?ALL_CONNECTED_USERS, User) of
                 [{_User, UserPid}] ->
@@ -144,72 +118,60 @@ get_pid(User) ->
     end,
     ResultPid = case Pid of
         no_pid ->
-            logger:debug("courier:get_pid(~p) PID not found", [User]),
+            logger:debug("courier:get_pid_on_current_node(~p) PID not found", [User]),
             no_pid;
         _Pid ->
             Object = {User, Pid, Now},
-            logger:debug("courier:get_pid Pid ~p", [Pid]),
+            logger:debug("courier:get_pid_on_current_node Pid ~p", [Pid]),
             ets:insert(?LATEST_ACTIVE_USERS, Object),
             case is_pid(Pid) of
                 true ->
-                    logger:debug("courier:get_pid ~p is pid", [Pid]),
+                    logger:debug("courier:get_pid_on_current_node ~p is pid", [Pid]),
                     Pid;
                 false ->
-                    logger:debug("courier:get_pid ~p is NOT pid", [Pid]),
+                    logger:debug("courier:get_pid_on_current_node ~p is NOT pid", [Pid]),
                     list_to_pid(Pid)
             end
     end,
-    logger:debug("courier:get_pid(~p) ~p", [User, ResultPid]),
+    logger:debug("courier:get_pid_on_current_node(~p) ~p", [User, ResultPid]),
     ResultPid.
 
-handle_cast({connected, User, SocketServerPid}, State) ->
-    logger:debug("courier:connected() Trying to connect user ~p", [User]),
-    Now = now(),
-    StrPid = pid_to_list(SocketServerPid),
-    ets:insert(?LATEST_CONNECTED_USERS, {User, StrPid, Now}),
-    ets:insert(?LATEST_ACTIVE_USERS, {User, StrPid, Now}),
-    ets:insert(?ALL_CONNECTED_USERS, {User, StrPid}),
-    logger:info("courier:connected() User ~p is now connected.", [User]),
-    {noreply, State};
-
-handle_cast({group_msg, MsgId, FromUser, Msg}, State) ->
-    logger:debug(
-        "courier:handle_cast() group_msg New group message ~p from user ~p", [Msg, FromUser]),
-    case get_pid(FromUser) of
+get_pid(User) ->
+    case get_pid_on_current_node(User) of
         no_pid ->
-            ok;
-        FromUserPid ->
-            case roster_master:get_friends(FromUser) of
-                {friends_list, []} ->
-                    logger:debug("courier:handle_cast() group_msg Did not send message ~p to anyone"
-                        ++ " because user ~p has no friends yet.", [Msg, FromUser]),
-                    socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?NO_FRIENDS, FromUserPid);
-                {friends_list, FriendsList} ->
-                    logger:debug("Found friend list: ~p for user ~p", [FriendsList, FromUser]),
-                    lists:foreach(
-                        fun(User) ->
-                            case get_pid(User) of
-                                no_pid ->
-                                    logger:debug("courier:handle_cast() group_msg Could not send "
-                                        ++ "message to ~p because s/he is not registered.", [User]);
-                                UserPid ->
-                                    socket_handler:send_msg_to_pid(Msg, UserPid)
-                            end
-                        end,
-                        FriendsList
-                    ),
-                    socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?GROUP_MESSAGE_SENT, FromUserPid)
-            end
-    end,
-    {noreply, State};
+            gen_server:call({master_courier, ?MASTER_NODE}, {get_pid_of_user, User});
+        Pid ->
+            Pid
+    end.
 
-handle_cast({chat, MsgId, FromUser, ToUser, Msg}, State) ->
-    logger:debug("courier:handle_cast() chat New message for user ~p", [ToUser]),
-    FromUserPid = get_pid(FromUser),
+handle_send_group_msg(FromUser, FromUserPid, Msg, MsgId) ->
+    case roster_master:get_friends(FromUser) of
+        {friends_list, []} ->
+            logger:debug("courier:handle_cast() group_msg Did not send message ~p to anyone"
+                ++ " because user ~p has no friends yet.", [Msg, FromUser]),
+            socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?NO_FRIENDS, FromUserPid);
+        {friends_list, FriendsList} ->
+            logger:debug("Found friend list: ~p for user ~p", [FriendsList, FromUser]),
+            lists:foreach(
+                fun(User) ->
+                    case get_pid(User) of
+                        no_pid ->
+                            logger:debug("courier:handle_cast() group_msg Could not send "
+                                ++ "message to ~p because s/he is not registered.", [User]);
+                        UserPid ->
+                            socket_handler:send_msg_to_pid(Msg, UserPid)
+                    end
+                end,
+                FriendsList
+            ),
+            socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?GROUP_MESSAGE_SENT, FromUserPid)
+    end.
+
+handle_chat(FromUser, FromUserPid, ToUser, Msg, MsgId) ->
     case roster_master:are_friends(FromUser, ToUser) of
         true ->
             %% We need the pid of ToUser.
-            case get_pid(ToUser) of
+            case get_pid_on_current_node(ToUser) of
                 no_pid ->
                     logger:debug("courier:handle_cast() chat Could not send message ~p to user"
                         ++ "~p because (s)he is not regitered on this chat.", [Msg, ToUser]),
@@ -227,7 +189,62 @@ handle_cast({chat, MsgId, FromUser, ToUser, Msg}, State) ->
              socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?NOT_FRIENDS, FromUserPid);
         Other ->
             socket_handler:send_msg_to_pid(MsgId ++ "," ++ Other, FromUserPid)
+    end.
+
+%%%=================================================================================================
+%%% gen_server callbacks
+%%%=================================================================================================
+init(_Args) ->
+    % {User, Pid, Timestamp}
+    ets:new(?LATEST_CONNECTED_USERS, [set, public, named_table]),
+    ets:new(?LATEST_ACTIVE_USERS, [set, public, named_table]),
+    ets:new(?ALL_CONNECTED_USERS, [set, public, named_table]),
+    case timer:send_interval(?TIME_TO_UPDATE_COURIER_ETS_TABLES, update_latest_ets_table) of
+        {ok, _Tref} ->
+            logger:debug("courier:init() Timer set for update_latest_ets_table");
+        {error, Error} ->
+            logger:error("courieri:init() Timer was not set for update_latest_ets_table ~p",
+                [Error])
     end,
+	{ok, []}.
+
+handle_call({disconnected, User}, {FromPid, _FromTag}, State) ->
+    logger:info("courier:disconnected() User ~p disconnected (PID = ~p)", [User, FromPid]),
+    ets:delete(?ALL_CONNECTED_USERS, User),
+    ets:delete(?LATEST_CONNECTED_USERS, User),
+    ets:delete(?LATEST_ACTIVE_USERS, User),
+    {reply, ok, State};
+
+% gen_server:call({courier, Node}, {get_pid_of_user, User}) of
+handle_call({get_pid_of_user, User}, _From, State) ->
+    {reply, get_pid_on_current_node(User), State};
+
+handle_call({group_msg, MsgId, FromUser, Msg}, {FromUserPid, _Tag}, State) ->
+    logger:debug(
+        "courier:handle_cast() group_msg New group message ~p from user ~p", [Msg, FromUser]),
+    % handle_send_group_msg
+    % handle_send_group_msg()
+    spawn(courier, handle_send_group_msg, [FromUser, FromUserPid, Msg, MsgId]),
+    {reply, ok, State};
+
+handle_call({chat, MsgId, FromUser, ToUser, Msg}, {FromUserPid, _Tag}, State) ->
+    logger:debug("courier:handle_cast() chat New message for user ~p", [ToUser]),
+    % handle_chat()
+    spawn(courier, handle_chat, [FromUser, FromUserPid, ToUser, Msg, MsgId]),
+    {reply, ok, State};
+
+handle_call(Request, From, State) ->
+    logger:error("courier:handle_call(): Unknown request ~p from PID ~p", [Request, From]),
+    {noreply, State}.
+
+handle_cast({connected, User, SocketServerPid}, State) ->
+    logger:debug("courier:connected() Trying to connect user ~p", [User]),
+    Now = now(),
+    StrPid = pid_to_list(SocketServerPid),
+    ets:insert(?LATEST_CONNECTED_USERS, {User, StrPid, Now}),
+    ets:insert(?LATEST_ACTIVE_USERS, {User, StrPid, Now}),
+    ets:insert(?ALL_CONNECTED_USERS, {User, StrPid}),
+    logger:info("courier:connected() User ~p is now connected.", [User]),
     {noreply, State};
 
  handle_cast({server_msg, ToUser, Msg}, State) ->

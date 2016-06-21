@@ -118,15 +118,32 @@ is_user_registered(User) ->
             IsRegistered
     end.
 
+is_registered_on_nodes([], _Node, _User) ->
+    false;
+
+is_registered_on_nodes([RequestNode | Nodes], RequestNode, User) ->
+    is_registered_on_nodes(Nodes, RequestNode, User);
+
+is_registered_on_nodes([?MASTER_NODE | Nodes], RequestNode, User) ->
+    is_registered_on_nodes(Nodes, RequestNode, User);
+
+is_registered_on_nodes([Node | Nodes], RequestNode, User) ->
+    case gen_server:call({registration, Node}, {is_registered, User}) of
+        true ->
+            true;
+        false ->
+            is_registered_on_nodes(Nodes, RequestNode, User)
+    end.
+
 %%%=================================================================================================
 %%% gen_server callbacks
 %%%=================================================================================================
 init(_Args) ->
     logger:debug("master_registration:init()"),
     %% TODO see if needed to integrate the option {heir,Pid,HeirData} | {heir,none}
-    ets:new(?LATEST_REGISTERED_USED_TAB, [set, private, named_table]),
-    ets:new(?LATEST_REGISTERED_ADDED_TAB, [set, private, named_table]),
-    ets:new(?ALL_REGISTERED_TAB, [set, private, named_table]),
+    ets:new(?LATEST_REGISTERED_USED_TAB, [set, public, named_table]),
+    ets:new(?LATEST_REGISTERED_ADDED_TAB, [set, public, named_table]),
+    ets:new(?ALL_REGISTERED_TAB, [set, public, named_table]),
 
     ExistingRegisteredUsers = mysql_utils:get_all_users(),
     lists:foreach(
@@ -153,8 +170,28 @@ init(_Args) ->
     end,
     {ok, []}.
 
-handle_call({is_registered, User}, _From, State) ->
-    IsRegistered = is_user_registered(User),
+handle_call({is_registered, User}, {FromPid, _Tag}, State) ->
+    IsRegistered =
+        case is_user_registered(User) of
+            true ->
+                true;
+            false ->
+                Node = node(FromPid),
+                Nodes = pool:get_nodes(),
+                logger:debug("master_registration:handle_call() is_registered from node ~p will "
+                    ++ "query nodes ~p", [Node, Nodes]),
+                Now = now(),
+                case is_registered_on_nodes(Nodes, Node, User) of
+                    true ->
+                        ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
+                        ets:insert(?LATEST_REGISTERED_ADDED_TAB, {User, "parola", Now}),
+                        ets:insert(?ALL_REGISTERED_TAB, {User, "parola"}),
+                        true;
+                    false ->
+                        ets:insert(?LATEST_REGISTERED_USED_TAB, {User, false, Now}),
+                        false
+                end
+        end,
     logger:debug("master_registration:handle_call() is_registered ~p: ~p", [User, IsRegistered]),
     {reply, is_user_registered(User), State};
 

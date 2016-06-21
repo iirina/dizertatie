@@ -125,8 +125,7 @@ is_user_registered(User) ->
                 "registration:is_user_registered(~p) is registered on current node", [User]),
             true;
         false ->
-            MasterNode = list_to_atom(?MASTER_NODE),
-            ServerRef = {master_registration, MasterNode},
+            ServerRef = {master_registration, ?MASTER_NODE},
             Request = {is_registered, User},
             IsRegistered = gen_server:call(ServerRef, Request),
             logger:debug("registration:is_user_registered(~p) is registered on MASTER node: ~p",
@@ -150,9 +149,9 @@ is_user_registered(User) ->
 init(_Args) ->
     logger:debug("registration:init()"),
     %% TODO see if needed to integrate the option {heir,Pid,HeirData} | {heir,none}
-    ets:new(?LATEST_REGISTERED_USED_TAB, [set, private, named_table]),
-    ets:new(?LATEST_REGISTERED_ADDED_TAB, [set, private, named_table]),
-    ets:new(?ALL_REGISTERED_TAB, [set, private, named_table]),
+    ets:new(?LATEST_REGISTERED_USED_TAB, [set, public, named_table]),
+    ets:new(?LATEST_REGISTERED_ADDED_TAB, [set, public, named_table]),
+    ets:new(?ALL_REGISTERED_TAB, [set, public, named_table]),
 
     ExistingRegisteredUsers = mysql_utils:get_all_users(),
     lists:foreach(
