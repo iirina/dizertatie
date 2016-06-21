@@ -38,10 +38,24 @@ start_link() ->
 %%%=================================================================================================
 %%% helper functions
 %%%=================================================================================================
-%% Returns a list of the usernames of all the User's friends.
-get_all_friends(User) ->
+%% Returns a set of the usernames of all the User's friends.
+get_friends_on_current_node(User) ->
     EtsList = ets:lookup(?ALLTIME_FRIENDS_TAB, User),
-    lists:map(fun({_User, Friend}) -> Friend end, EtsList).
+    % add_element(Element, Set1)
+    FriendsSet = lists:foldl(
+        fun({_User, Friend}, CurrSet) ->
+            sets:add_element(Friend, CurrSet)
+        end,
+        sets:new(),
+        EtsList),
+    FriendsSet.
+
+get_all_friends(User) ->
+    FriendsSetFromCurrentNode = get_friends_on_current_node(User),
+    FriendsSetFromMaster =
+        gen_server:call({master_roster_master, ?MASTER_NODE}, {get_friends, User}),
+    AllFriendsSet = sets:union(FriendsSetFromCurrentNode, FriendsSetFromMaster),
+    sets:to_list(AllFriendsSet).
 
 are_users_friends(User1, User2) ->
     Now = now(),

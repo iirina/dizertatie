@@ -63,6 +63,8 @@ are_friends(_User1, _User2) ->
 add_worker_pid(Pid) ->
     gen_server:cast(roster_master, {add_worker_pid, Pid}).
 
+% gen_server:call({roster_master, ?NODE}, {get_friends_on_current_node, User}) 
+
 %%%=================================================================================================
 %%% helper functions
 %%%=================================================================================================
@@ -173,6 +175,16 @@ set_timers() ->
                 [DropError])
     end.
 
+get_friends_on_current_node(User) ->
+    EtsList = ets:lookup(?ALLTIME_FRIENDS_TAB, User),
+    % add_element(Element, Set1)
+    FriendsSet = lists:foldl(
+        fun({_User, Friend}, CurrSet) ->
+            sets:add_element(Friend, CurrSet)
+        end,
+        sets:new(),
+        EtsList),
+    FriendsSet.
 %%%=================================================================================================
 %%% gen_server callbacks
 %%%=================================================================================================
@@ -199,6 +211,9 @@ init(_Args) ->
     %% We start the workers now and wait for their PID to be sent async later.
     start_workers(?NR_WORKERS),
     {ok, #state{worker_pids = queue:new()}}.
+
+handle_call({get_friends_on_current_node, User}, _From, State) ->
+    {reply, get_friends_on_current_node(User), State};
 
 handle_call({are_friends, _User1, _User2}, _From, State) ->
     logger:debug("roster_master:handle_call() are_friends"),

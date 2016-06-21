@@ -172,6 +172,22 @@ set_timers() ->
                 [DropError])
     end.
 
+ % get_friends_on_all_other_nodes(Nodes, RequestNode, User, sets:new())
+
+get_friends_on_all_other_nodes([], _RequestNode, _User, CurrFriendsSet) ->
+  CurrFriendsSet;
+
+get_friends_on_all_other_nodes([RequestNode | Nodes], RequestNode, User, CurrFriendsSet) ->
+    get_friends_on_all_other_nodes(Nodes, RequestNode, User, CurrFriendsSet);
+
+get_friends_on_all_other_nodes([?MASTER_NODE | Nodes], RequestNode, User, CurrFriendsSet) ->
+    get_friends_on_all_other_nodes(Nodes, RequestNode, User, CurrFriendsSet);
+
+get_friends_on_all_other_nodes([Node | Nodes], RequestNode, User, CurrFriendsSet) ->
+    FriendsOnNode = gen_server:call({roster_master, Node}, {get_friends_on_current_node, User}),
+    get_friends_on_all_other_nodes(
+        Nodes, RequestNode, User, sets:union(CurrFriendsSet, FriendsOnNode)).
+
 %%%=================================================================================================
 %%% gen_server callbacks
 %%%=================================================================================================
@@ -198,6 +214,14 @@ init(_Args) ->
     %% We start the workers now and wait for their PID to be sent async later.
     start_workers(?NR_WORKERS),
     {ok, #state{worker_pids = queue:new()}}.
+% gen_server:call({master_roster_master, ?MASTER_NODE}, {get_friends, User}),
+
+%% Returns a set of the friends of this user from all nodes
+handle_call({get_friends, User}, {FromPid, _Tag}, State) ->
+    RequestNode = node(FromPid),
+    Nodes = pool:get_nodes(),
+    AllFriendsSet = get_friends_on_all_other_nodes(Nodes, RequestNode, User, sets:new()),
+    {reply, AllFriendsSet, State};
 
 handle_call({are_friends, _User1, _User2}, _From, State) ->
     logger:debug("master_roster_master:handle_call() are_friends"),
