@@ -49,21 +49,22 @@ start_link(Args) ->
 %%%===================================================================
 %%% Helper functions
 %%%===================================================================
-read(Socket, Name, Pid) ->
-    logger:debug("socket_handler:read() Ready to read."),
+read(Socket, Name, SocketServerPid) ->
+    logger:debug(
+        "socket_handler:read() Ready to read for socket_handler server ~p", [SocketServerPid]),
     case gen_tcp:recv(Socket, 0) of
         {ok, Packet} ->
             %% Pid corresponds to the gen_server that handles Socket.
             StringPacket = chat_utils:trim_string(erlang:binary_to_list(Packet)),
             Requests = string:tokens(StringPacket, "\n"),
-            NewName = handle_request(Requests, Name, Pid),
-            read(Socket, NewName, Pid);
+            NewName = handle_request(Requests, Name, SocketServerPid),
+            read(Socket, NewName, SocketServerPid);
         {error, closed} ->
             logger:debug(
                 "socket_handler:loop() Stopped reading for user ~p in PID ~p. Socket closed.",
-                    [Name, Pid]),
-            unlink(Pid),
-            gen_server:cast(Pid, socket_closed)
+                    [Name, SocketServerPid]),
+            unlink(SocketServerPid),
+            gen_server:cast(SocketServerPid, socket_closed)
     end.
 
 handle_request([], Name, _Pid) ->
@@ -195,7 +196,8 @@ get_action_type(Request) ->
 init(Args) ->
     {socket, Socket} = Args,
     logger:debug("socket_handler:init() Initializing socket_handler."),
-    spawn_link(socket_handler, read, [Socket, undefined, self()]),
+    SocketServerPid = self(),
+    spawn_link(socket_handler, read, [Socket, undefined, SocketServerPid]),
     %% We set the Name undefined for now and wait for it to be set properly when the
     %% authentication is successful.
     {ok, {Socket, undefined}}.
