@@ -59,10 +59,14 @@ app.get('/messagetemplateown.html', function(req, res) {
 app.get('/usertemplate.html', function(req, res) {
   res.render('usertemplate.html');
 });
+app.get('/grouptemplate.html', function(req, res) {
+  res.render('grouptemplate.html');
+});
 app.get('/get_updates', function(req, res) {
   var username = req.query.username;
   var msg = messages[username];
   messages[username] = undefined;
+  //console.log('Responding with ' + msg);
   res.send(msg);
 });
 
@@ -82,19 +86,30 @@ app.get('/ajax', function(req, res) {
       clients[username] = connectToClient(username);
     }
     var request = id;
-    if (command == 'register' || command == 'auth') {
+    if (command === 'register' || command === 'auth') {
       request = request + ',' + command + ',' + params;
     } else {
       sp = params.split(',');
+      if (command === 'chat' && sp[1] === '_GROUP_') {
+        request = request + ',' + 'group' + ',' + escapeMessage(sp);
+      }
       request = request + ',' + command + ',' + sp[1];
-      if (command == 'chat') {
-        request = request + ',' + sp[2];
+      if (command === 'chat') {
+        request = request + ',' + escapeMessage(sp);
       }
     }
     console.log('Seding request ' + request);
     clients[username].write(request);
     res.end();
 });
+
+function escapeMessage(sp) {
+  var msg = '';
+  for  (i=2;i<sp.length;i++) {
+      msg = msg + '%2C' + sp[i];
+  }
+  return msg.substring(4).split('%').join('%25');
+}
 
 app.listen('8080', '127.0.0.1');
 

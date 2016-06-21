@@ -11,7 +11,8 @@
   overflow-y:auto;
 }
 .listbody {
-  height: 90vh;
+  height: 92vh;
+  overflow-y:auto;
 }
 .bubble
 {
@@ -57,6 +58,19 @@ width: 0;
 z-index: 1;
 top: -14px;
 left: 14px;
+}
+.numberCircle {
+    border-radius: 50%;
+    behavior: url(PIE.htc); /* remove if you don't care about IE8 */
+    width: 16px;
+    height: 16px;
+    padding: 3px;
+    background: red;
+    color: white;
+    text-align: center;
+    font: 10px Arial, sans-serif;
+    font-weight: bold;
+    display: inline-block;
 }
 </style>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
@@ -107,6 +121,10 @@ setInterval(function(){
             addMessage(username, message, timestamp, false);
           } else if (msg.indexOf('(group)>') > -1) {
             //timestamp user (group)> mesaj
+            var timestamp = msg.split(' ')[0];
+            var username = msg.split(' ')[1];
+            var message = msg.split('(group)>')[1];
+            addMessage(username, message, timestamp, false);
           } else if (msg.indexOf('friends:') > -1) {
             //x,friends:user,user,user
             var friends = msg.split(':')[1].split(',');

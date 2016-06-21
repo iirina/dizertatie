@@ -6,8 +6,7 @@ function addUser(username) {
   $.ajax({url: 'usertemplate.html', 
           success: function(html_data) {
                       var newFriend = html_data.split("$user$").join(username);
-                      userlist = userlist + newFriend;
-                      $("#friendslist").html(userlist);
+                      $("#friendslist").append(newFriend);
                   }
         });
 }
@@ -24,7 +23,7 @@ function addMessage(username, message, timestamp, own) {
   }
   $.ajax({url: urlrequest, 
           success: function(html_data) {
-                      var newMessage = html_data.split("$message$").join(message);
+                      var newMessage = html_data.split("$message$").join(decodeURIComponent(message));
                       newMessage = newMessage.split("$user$").join(author);
                       newMessage = newMessage.split("$time$").join(timestamp);
                       if (messages[username] === undefined) {
@@ -33,7 +32,7 @@ function addMessage(username, message, timestamp, own) {
                           var str = messages[username];
                           var lastUsername = str.substring(str.lastIndexOf('<strong class="primary-font">')+29,str.lastIndexOf('</strong>'));
                           if (author === lastUsername) {
-                            str = str.substring(0,str.lastIndexOf('</div >')) + '<br>' + message + '</div >\n  </div>\n</li>';
+                            str = str.substring(0,str.lastIndexOf('</div >')) + '<br>' + decodeURIComponent(message) + '</div >\n  </div>\n</li>';
                             messages[username] = str.substring(0,str.lastIndexOf('</span>')+7) + timestamp + str.substring(str.lastIndexOf('</small>'));
                           } else {
                             messages[username] = str + newMessage;
@@ -42,11 +41,17 @@ function addMessage(username, message, timestamp, own) {
                       var out = document.getElementById("bodyofchat");
                       var isScrolledToBottom = out.scrollHeight - out.clientHeight <= out.scrollTop + 1;
                       if (activeChat == username) {
-                          $("#messages").html(messages[username]);
-                      }
-                      
-                      if(isScrolledToBottom) {
-                        out.scrollTop = out.scrollHeight - out.clientHeight;
+                          $("#messages").html(messages[username]);if(isScrolledToBottom) {
+                          out.scrollTop = out.scrollHeight - out.clientHeight;
+                        }
+                      } else {
+                        var notifs = $("#message_notification_"+username).html();
+                        if (notifs === undefined || notifs === "") {
+                          $("#message_notification_"+username).html("1");
+                          $("#message_notification_"+username).addClass("numberCircle");
+                        } else {
+                          $("#message_notification_"+username).html(parseInt(notifs)+1);
+                        }
                       }
                   }
         });
@@ -54,23 +59,33 @@ function addMessage(username, message, timestamp, own) {
 function openchat(username) {
   var oldActive = activeChat;
   activeChat = username;
+  if (oldActive === username) {
+    return;
+  }
   if (messages[username] === undefined) {
     $("#messages").html("");
   } else {
     $("#messages").html(messages[username]);
   }
-  $("#chatfriend").html(username);
+  if (username === '_GROUP_') {
+    $("#chatfriend").html('Group');  
+  } else {
+    $("#chatfriend").html(username);
+  }
   $("#user_"+username).addClass("active");
   $("#user_"+oldActive).removeClass("active");
   var out = document.getElementById("bodyofchat");
   out.scrollTop = out.scrollHeight - out.clientHeight;
+  $("#message_notification_"+username).html("");
+  $("#message_notification_"+username).removeClass("numberCircle");
 }
 function send() {
     if(! ($("#message_to_send").val() === undefined || $("#message_to_send").val() === "")) {
       var out = document.getElementById("bodyofchat");
       out.scrollTop = out.scrollHeight - out.clientHeight;
-      addMessage(activeChat, $("#message_to_send").val(), new Date().toTimeString().split(' ')[0], true);
-      $.ajax('ajax?command=chat&params='+user+','+activeChat+','+$("#message_to_send").val());
+      var encodedMessage = encodeURIComponent($("#message_to_send").val());
+      addMessage(activeChat, encodedMessage, new Date().toTimeString().split(' ')[0], true);
+      $.ajax('ajax?command=chat&params='+user+','+activeChat+','+encodedMessage);
       $("#message_to_send").val(undefined);
     }
 }
@@ -108,15 +123,22 @@ function triggerFriendRequest(username) {
 function triggerFriendsListUpdate() {
   $("#signedinuser").html(user);
   $.ajax('ajax?command=get_friends&params='+user);
+  $.ajax({url: 'grouptemplate.html', 
+        success: function(html_data) {
+                   userlist = html_data;
+                   $("#friendslist").html(userlist);
+                   openchat("_GROUP_");
+                 }
+       });
 }
 </script>
 <div class = "container">
 <div class="row fill">
-<div class="col-md-8 fill">
+<div class="col-md-8 fill" style="padding-right:3px;">
 
-        <div class="panel panel-primary">
-            <div class="panel-heading">
-                <span class="glyphicon glyphicon-comment"></span> Chat with <span id = "chatfriend"></span>
+        <div class="panel panel-primary" style="border-top-right-radius:0px;border-bottom-right-radius:0px;">
+            <div class="panel-heading" style="border-top-right-radius:0px;">
+                <span class="glyphicon glyphicon-comment"></span> &nbsp;&nbsp;&nbsp; <span id = "chatfriend"></span>
                 <div class="btn-group pull-right">
                     <button type="button" class="btn btn-default btn-xs dropdown-toggle" data-toggle="dropdown">
                       <span id = "signedinuser"> </span>  <span class="glyphicon glyphicon-chevron-down"></span>
@@ -146,9 +168,9 @@ function triggerFriendsListUpdate() {
             </div>
         </div>
       </div>
-<div class="col-md-3 fill">
-      <div class="panel panel-primary">
-        <div class="panel-heading">
+<div class="col-md-3 fill" style="padding-left:3px;">
+      <div class="panel panel-primary" style="border-top-left-radius:0px;border-bottom-left-radius:0px;">
+        <div class="panel-heading" style="border-top-left-radius=0px;">
            ONLINE USERS
         </div>
         <div class="panel-body listbody">
