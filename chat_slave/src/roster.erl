@@ -97,6 +97,23 @@ handle_call(OtherRequest, _From, State) ->
     logger:error("roster:handle_call() Unknown cast request ~p", [OtherRequest]),
     {noreply, State}.
 
+%% We only add the friendship on the current node.
+handle_cast({add_remote_friends, User1, User2}, State) ->
+    Now = now(),
+    %% insert overrides old values for the same key.
+    ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User1, User2}), true, Now}),
+    ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User2, User1}), true, Now}),
+
+    ets:insert(?LATEST_ADDED_TAB, {tuple_to_list({User1, User2}), Now}),
+    ets:insert(?LATEST_ADDED_TAB, {tuple_to_list({User2, User1}), Now}),
+
+    ets:insert(?ALLTIME_FRIENDS_TAB, {User1, User2}),
+    ets:insert(?ALLTIME_FRIENDS_TAB, {User2, User1}),
+    {noreply, State};
+
+
+%% We add the friendship on the current node and, if User2 is connected on a different node,
+%% we also add the friendship remotely there.
 handle_cast({add_friend, User1, User2}, State) ->
     Now = now(),
     %% insert overrides old values for the same key.
@@ -108,6 +125,21 @@ handle_cast({add_friend, User1, User2}, State) ->
 
     ets:insert(?ALLTIME_FRIENDS_TAB, {User1, User2}),
     ets:insert(?ALLTIME_FRIENDS_TAB, {User2, User1}),
+
+    case gen_server:call(courier, {get_pid_of_user, User2}) of
+        no_pid ->
+            % User2 is handled by another node (if connected) and we want to find that node
+            case gen_server:call({master_courier, ?MASTER_NODE}, {get_pid_of_user, User2}) of
+                no_pid ->
+                    % User2 is not connected on any node, so we won't do anything now.
+                    ok;
+                RemoteUser2Pid ->
+                    ServerRef = {roster_master, node(RemoteUser2Pid)},
+                    gen_server:cast(ServerRef, {add_remote_friends, User1, User2})
+            end;
+        _User2Pid ->
+            ok
+    end,
     {noreply, State};
 
 handle_cast(OtherRequest, State) ->
