@@ -171,20 +171,20 @@ handle_chat(FromUser, FromUserPid, ToUser, Msg, MsgId) ->
     case roster_master:are_friends(FromUser, ToUser) of
         true ->
             %% We need the pid of ToUser.
-            case get_pid_on_current_node(ToUser) of
+            case get_pid(ToUser) of
                 no_pid ->
-                    logger:debug("courier:handle_cast() chat Could not send message ~p to user"
+                    logger:debug("courier:handle_chat Could not send message ~p to user"
                         ++ "~p because (s)he is not regitered on this chat.", [Msg, ToUser]),
                     socket_handler:send_msg_to_pid(
                         MsgId ++ "," ++ ?FRIEND_UNAVAILABLE, FromUserPid);
                 ToPid ->
-                    logger:debug("courier:handle_cast() chat Found PID ~p for user ~p.",
+                    logger:debug("courier:handle_chat Found PID ~p for user ~p.",
                         [ToPid, ToUser]),
                     socket_handler:send_msg_to_pid(Msg, ToPid),
                     socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?MESSAGE_SENT, FromUserPid)
              end;
          false ->
-             logger:debug("courier:handle_cast() chat Could not send message to ~p because (s)he is"
+             logger:debug("courier:handle_chat Could not send message to ~p because (s)he is"
                 " not a friend of ~p.", [ToUser, FromUser]),
              socket_handler:send_msg_to_pid(MsgId ++ "," ++ ?NOT_FRIENDS, FromUserPid);
         Other ->
