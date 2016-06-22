@@ -37,7 +37,7 @@ get_all_users() ->
     end.
 
 bulk_insert_into_friends(Values) ->
-    p1_mysql:fetch(?MYSQL_ID, ?INSERT_FRIENDS_INTO_MYSQL ++ Values).
+    p1_mysql:fetch(?MYSQL_ID, ?INSERT_FRIENDS_INTO_MYSQL ++ Values, infinity).
 
 bulk_insert_into_user(Values) ->
-    p1_mysql:fetch(?MYSQL_ID, ?INSERT_USERS_INTO_MYSQL ++ Values).
+    p1_mysql:fetch(?MYSQL_ID, ?INSERT_USERS_INTO_MYSQL ++ Values, infinity).
