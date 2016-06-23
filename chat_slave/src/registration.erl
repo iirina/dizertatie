@@ -181,25 +181,27 @@ init(_Args) ->
     end,
     {ok, []}.
 
-handle_call({is_registered_on_node, User}, _From, State) ->
-    logger:debug("registration:handle_call is_registered_on_node ~p", [User]),
-    {reply, is_registered_on_node(User), State};
+handle_call({is_registered_on_node, _User}, _From, State) ->
+    % logger:debug("registration:handle_call is_registered_on_node ~p", [User]),
+    % {reply, is_registered_on_node(User), State};
+    {reply, true, State};
 
-handle_call({is_registered, User}, _From, State) ->
-    {reply, is_user_registered(User), State};
+handle_call({is_registered, _User}, _From, State) ->
+    % {reply, is_user_registered(User), State};
+    {reply, true, State};
 
 handle_call({register, User, Password}, _From, State) ->
     Now = now(),
     logger:debug("registration:handle_cast() register User ~p Password ~p", [User, Password]),
-    case is_user_registered(User) of
-        true ->
-            logger:debug("register:handle_cast() register User ~p already used.", [User]),
-            {reply, {false, ?USER_TAKEN}, State};
-        false ->
+    % case is_user_registered(User) of
+    %     true ->
+    %         logger:debug("register:handle_cast() register User ~p already used.", [User]),
+    %         {reply, {false, ?USER_TAKEN}, State};
+    %     false ->
             ets:insert(?LATEST_REGISTERED_ADDED_TAB, {User, Password, Now}),
             ets:insert(?LATEST_REGISTERED_USED_TAB, {User, true, Now}),
-            {reply, {true, ?REGISTRATION_COMPLETED}, State}
-    end;
+            {reply, {true, ?REGISTRATION_COMPLETED}, State};
+    % end;
 
 handle_call(OtherRequest, _From, State) ->
     logger:error("registration:handle_call() Unknown cast request ~p", [OtherRequest]),

@@ -32,16 +32,16 @@
 -define(MYSQL_PASSWORD, "parola").
 -define(MYSQL_DATABASE, "chat").
 
--define(GENERAL_NR, 10).
+-define(GENERAL_NR, 1000).
 
 -define(NR_USERS, ?GENERAL_NR).
--define(NR_FRIENDSHIP, ?GENERAL_NR * 100).
--define(NR_MESSAGES, ?GENERAL_NR).
+-define(NR_FRIENDSHIP, ?GENERAL_NR).
+-define(NR_MESSAGES, ?GENERAL_NR * 10).
 -define(NR_GROUP_MESSAGES, ?GENERAL_NR).
 -define(BATCH_SIZE, 10).
 -define(MAX_MESSAGE_LENGTH, 20).
 
--define(SLAVE1_HOST, '192.168.178.22').
+-define(SLAVE1_HOST, '192.168.178.28').
 -define(SLAVE2_HOST, '192.168.178.28').
 -define(SLAVE_PORT, 5400).
 -define(MASTER_PORT, 5400).
