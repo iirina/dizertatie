@@ -7,7 +7,6 @@ var app = express();
 var messages = new Object();
 var clients = new Object();
 var id = 1;
-
 app.engine('html', require('ejs').renderFile);
 
 
@@ -82,31 +81,25 @@ app.get('/ajax', function(req, res) {
     id++;
     var command = req.query.command;
     var params = req.query.params;
-    var clientWasAlreadyDefined = false;
-    sp = params.split(',');
-    username = sp[0];
+    username = params.split(',')[0];
     if (clients[username] === undefined) {
       clients[username] = connectToClient(username);
-  } else {
-      clientWasAlreadyDefined = true;
-  }
+    }
     var request = id;
     if (command === 'register' || command === 'auth') {
       request = request + ',' + command + ',' + params;
     } else {
+      sp = params.split(',');
       if (command === 'chat' && sp[1] === '_GROUP_') {
         request = request + ',' + 'group' + ',' + escapeMessage(sp);
       }
       request = request + ',' + command + ',' + sp[1];
-      if (command === 'chat' && sp[1] != '_GROUP_') {
+      if (command === 'chat') {
         request = request + ',' + escapeMessage(sp);
       }
     }
     console.log('Seding request ' + request);
     clients[username].write(request);
-    if (command === 'auth' && clientWasAlreadyDefined) {
-        res.send("authentication_successful");
-    }
     res.end();
 });
 
@@ -115,7 +108,7 @@ function escapeMessage(sp) {
   for  (i=2;i<sp.length;i++) {
       msg = msg + '%2C' + sp[i];
   }
-  return msg.substring(3).split('%').join('%25');
+  return msg.substring(4).split('%').join('%25');
 }
 
 app.listen('8080', '127.0.0.1');

@@ -3,7 +3,7 @@ var userlist = "";
 var activeChat;
 var messages = {};
 function addUser(username) {
-  $.ajax({url: 'usertemplate.html', 
+  $.ajax({url: 'usertemplate.html',
           success: function(html_data) {
                       var newFriend = html_data.split("$user$").join(username);
                       $("#friendslist").append(newFriend);
@@ -21,7 +21,7 @@ function addMessage(username, message, timestamp, own) {
     urlrequest = 'messagetemplate.html';
     author = username;
   }
-  $.ajax({url: urlrequest, 
+  $.ajax({url: urlrequest,
           success: function(html_data) {
                       var newMessage = html_data.split("$message$").join(decodeURIComponent(message));
                       newMessage = newMessage.split("$user$").join(author);
@@ -68,7 +68,7 @@ function openchat(username) {
     $("#messages").html(messages[username]);
   }
   if (username === '_GROUP_') {
-    $("#chatfriend").html('Group');  
+    $("#chatfriend").html('Group');
   } else {
     $("#chatfriend").html(username);
   }
@@ -112,7 +112,7 @@ function reject(username) {
   $.ajax('ajax?command=reject_friend_request&params='+user+','+username);
 }
 function triggerFriendRequest(username) {
-  $.ajax({url: 'userrequestmodaltemplate.html', 
+  $.ajax({url: 'userrequestmodaltemplate.html',
           success: function(html_data) {
                       var modalBody = html_data.split("$username$").join(username);
                       $("#accept_friend_request").html(modalBody);
@@ -123,7 +123,7 @@ function triggerFriendRequest(username) {
 function triggerFriendsListUpdate() {
   $("#signedinuser").html(user);
   $.ajax('ajax?command=get_friends&params='+user);
-  $.ajax({url: 'grouptemplate.html', 
+  $.ajax({url: 'grouptemplate.html',
         success: function(html_data) {
                    userlist = html_data;
                    $("#friendslist").html(userlist);
