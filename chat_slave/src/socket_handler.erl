@@ -133,7 +133,7 @@ handle_packet(Packet, User, GenServerPid) ->
             roster_master:remove_friend(User, Friend),
             gen_server:cast(GenServerPid, {message, Id ++ "," ++ ?FRIENDSHIP_STATUS_SENT});
         _Other ->
-            do_nothing
+            courier:server_msg(User, "bad_request")
     end.
 
 get_action_type(Request) ->
@@ -187,7 +187,8 @@ get_action_type(Request) ->
                 [?ADD_FRIEND_TOKEN, Friend]),
             {remove_friend, Id, Friend};
         Other ->
-            logger:debug("socket_handler:get_action_type() Got unknown action: ~p", [Other]),
+            logger:debug("socket_handler:get_action_type() Got unknown action: ~p Request",
+                [Other, Request]),
             other
     end.
 
