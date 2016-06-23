@@ -57,27 +57,27 @@ get_all_friends(User) ->
     AllFriendsSet = sets:union(FriendsSetFromCurrentNode, FriendsSetFromMaster),
     sets:to_list(AllFriendsSet).
 
-are_users_friends(User1, User2) ->
-    Now = now(),
-    case ets:lookup(?LATEST_USED_FRIENDS_TAB, tuple_to_list({User1, User2})) of
-        [] ->
-            % [[{rufsen,dog,7}],[{brunte,horse,5}],[{ludde,dog,5}]]
-            % 7> ets:match(T, {'_',dog,'$1'}).
-            AreFriends = case ets:match_object(?ALLTIME_FRIENDS_TAB, {User1, User2}) of
-                            [_FoundElement] ->
-                                true;
-                            _Other ->
-                                false
-                          end,
-            ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User1, User2}), AreFriends, Now}),
-            ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User2, User1}), AreFriends, Now}),
-            AreFriends;
-        [{_AllegedFriendship, AreFriends, _Timestamp}] ->
-            %% insert overrides old values for the same key.
-            ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User1, User2}), AreFriends, Now}),
-            ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User2, User1}), AreFriends, Now}),
-            AreFriends
-    end.
+% are_users_friends(User1, User2) ->
+%     Now = now(),
+%     case ets:lookup(?LATEST_USED_FRIENDS_TAB, tuple_to_list({User1, User2})) of
+%         [] ->
+%             % [[{rufsen,dog,7}],[{brunte,horse,5}],[{ludde,dog,5}]]
+%             % 7> ets:match(T, {'_',dog,'$1'}).
+%             AreFriends = case ets:match_object(?ALLTIME_FRIENDS_TAB, {User1, User2}) of
+%                             [_FoundElement] ->
+%                                 true;
+%                             _Other ->
+%                                 false
+%                           end,
+%             ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User1, User2}), AreFriends, Now}),
+%             ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User2, User1}), AreFriends, Now}),
+%             AreFriends;
+%         [{_AllegedFriendship, AreFriends, _Timestamp}] ->
+%             %% insert overrides old values for the same key.
+%             ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User1, User2}), AreFriends, Now}),
+%             ets:insert(?LATEST_USED_FRIENDS_TAB, {tuple_to_list({User2, User1}), AreFriends, Now}),
+%             AreFriends
+%     end.
 
 %%%=================================================================================================
 %%% gen_server callbacks
@@ -90,8 +90,8 @@ init(_Args) ->
 handle_call({get_friends, User}, _From, State) ->
     {reply, {friends_list, get_all_friends(User)}, State};
 
-handle_call({are_friends, User1, User2}, _From, State) ->
-    {reply, are_users_friends(User1, User2), State};
+handle_call({are_friends, _User1, _User2}, _From, State) ->
+    {reply, true, State};
 
 handle_call(OtherRequest, _From, State) ->
     logger:error("roster:handle_call() Unknown cast request ~p", [OtherRequest]),

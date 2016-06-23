@@ -32,7 +32,7 @@
 
 -include("macros.hrl").
 
--define(NR_WORKERS, 3).
+-define(NR_WORKERS, 2).
 
 -record(state, {worker_pids}).
 
@@ -63,7 +63,7 @@ are_friends(_User1, _User2) ->
 add_worker_pid(Pid) ->
     gen_server:cast(roster_master, {add_worker_pid, Pid}).
 
-% gen_server:call({roster_master, ?NODE}, {get_friends_on_current_node, User}) 
+% gen_server:call({roster_master, ?NODE}, {get_friends_on_current_node, User})
 
 %%%=================================================================================================
 %%% helper functions
