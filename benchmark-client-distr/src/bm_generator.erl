@@ -41,7 +41,7 @@
 -define(BATCH_SIZE, 10).
 -define(MAX_MESSAGE_LENGTH, 20).
 
--define(SLAVE1_HOST, '192.168.178.28').
+-define(SLAVE1_HOST, '192.168.178.22').
 -define(SLAVE2_HOST, '192.168.178.28').
 -define(SLAVE_PORT, 5400).
 -define(MASTER_PORT, 5400).

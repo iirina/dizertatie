@@ -100,8 +100,9 @@ seconds_ago({Macro, Sec, Micro}) ->
     {Macro, Sec - 10, Micro}.
 
 is_registered_on_node(User) ->
+    logger:debug("registration:is_registered_on_node(~p)", [User]),
     Now = now(),
-    case ets:lookup(?LATEST_REGISTERED_USED_TAB, User) of
+    Result = case ets:lookup(?LATEST_REGISTERED_USED_TAB, User) of
         [] ->
             case ets:lookup(?ALL_REGISTERED_TAB, User) of
                 [_Element] ->
@@ -116,7 +117,9 @@ is_registered_on_node(User) ->
                     [User, IsRegistered]),
             ets:insert(?LATEST_REGISTERED_USED_TAB, {User, IsRegistered, Now}),
             IsRegistered
-    end.
+    end,
+    logger:debug("registration:is_registered_on_node(~p) = ~p", [User, Result]),
+    Result.
 
 is_user_registered(User) ->
     case is_registered_on_node(User) of
@@ -179,6 +182,7 @@ init(_Args) ->
     {ok, []}.
 
 handle_call({is_registered_on_node, User}, _From, State) ->
+    logger:debug("registration:handle_call is_registered_on_node ~p", [User]),
     {reply, is_registered_on_node(User), State};
 
 handle_call({is_registered, User}, _From, State) ->

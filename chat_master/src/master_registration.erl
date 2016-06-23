@@ -136,7 +136,16 @@ is_registered_on_nodes([?MASTER_NODE | Nodes], RequestNode, User) ->
 is_registered_on_nodes([Node | Nodes], RequestNode, User) ->
     logger:debug("master_registration:is_registered_on_nodes ~p ~p from RequestNode ~p",
         [Node, User, RequestNode]),
-    case gen_server:call({registration, Node}, {is_registered_on_node, User}) of
+    Response = try gen_server:call({registration, Node}, {is_registered_on_node, User}, 4000) of
+                    Reply ->
+                        Reply
+                    catch
+                        exit:{timeout, _} ->
+                            timeout
+                    end,
+    case Response of
+        timeout ->
+            is_registered_on_nodes([Node | Nodes], RequestNode, User);
         true ->
             true;
         false ->
