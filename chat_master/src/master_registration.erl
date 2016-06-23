@@ -118,17 +118,25 @@ is_user_registered(User) ->
             IsRegistered
     end.
 
-is_registered_on_nodes([], _Node, _User) ->
+is_registered_on_nodes([], RequestNode, User) ->
+    logger:debug("master_registration:is_registered_on_nodes ~p from RequestNode ~p is NOT registr",
+        [User, RequestNode]),
     false;
 
 is_registered_on_nodes([RequestNode | Nodes], RequestNode, User) ->
+    logger:debug("master_registration:is_registered_on_nodes reqnode ~p from RequestNode ~p",
+        [User, RequestNode]),
     is_registered_on_nodes(Nodes, RequestNode, User);
 
 is_registered_on_nodes([?MASTER_NODE | Nodes], RequestNode, User) ->
+    logger:debug("master_registration:is_registered_on_nodes master ~p from RequestNode ~p",
+        [User, RequestNode]),
     is_registered_on_nodes(Nodes, RequestNode, User);
 
 is_registered_on_nodes([Node | Nodes], RequestNode, User) ->
-    case gen_server:call({registration, Node}, {is_registered, User}) of
+    logger:debug("master_registration:is_registered_on_nodes ~p ~p from RequestNode ~p",
+        [Node, User, RequestNode]),
+    case gen_server:call({registration, Node}, {is_registered_on_node, User}) of
         true ->
             true;
         false ->
@@ -171,6 +179,7 @@ init(_Args) ->
     {ok, []}.
 
 handle_call({is_registered, User}, {FromPid, _Tag}, State) ->
+    logger:debug("master_registration:handle_call() is_registered ~p", [User]),
     IsRegistered =
         case is_user_registered(User) of
             true ->

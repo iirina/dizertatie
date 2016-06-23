@@ -32,13 +32,13 @@
 -define(MYSQL_PASSWORD, "parola").
 -define(MYSQL_DATABASE, "chat").
 
--define(GENERAL_NR, 500).
+-define(GENERAL_NR, 10).
 
 -define(NR_USERS, ?GENERAL_NR).
 -define(NR_FRIENDSHIP, ?GENERAL_NR * 100).
 -define(NR_MESSAGES, ?GENERAL_NR).
 -define(NR_GROUP_MESSAGES, ?GENERAL_NR).
--define(BATCH_SIZE, 100).
+-define(BATCH_SIZE, 10).
 -define(MAX_MESSAGE_LENGTH, 20).
 
 -define(SLAVE1_HOST, '192.168.178.28').
@@ -182,7 +182,7 @@ start_clients([Username | Usernames], Slave) ->
 %%%=================================================================================================
 init(_Args) ->
     logger:debug("bm_generator:init()"),
-    p1_mysql:start(?MYSQL_ID, ?MYSQL_HOST, ?MYSQL_USER, ?MYSQL_PASSWORD, ?MYSQL_DATABASE,
+    p1_mysql:start_link(?MYSQL_ID, ?MYSQL_HOST, ?MYSQL_USER, ?MYSQL_PASSWORD, ?MYSQL_DATABASE,
         fun(_Level, Format, Args) -> logger:debug(Format, Args) end),
     Usernames = get_usernames(?NR_USERS, []),
     start_clients(Usernames, slave1),

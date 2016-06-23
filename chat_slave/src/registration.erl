@@ -178,6 +178,9 @@ init(_Args) ->
     end,
     {ok, []}.
 
+handle_call({is_registered_on_node, User}, _From, State) ->
+    {reply, is_registered_on_node(User), State};
+
 handle_call({is_registered, User}, _From, State) ->
     {reply, is_user_registered(User), State};
 
